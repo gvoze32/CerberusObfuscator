@@ -96,14 +96,14 @@ This project includes **two powerful obfuscators** with unified, reliable archit
 # Install pip dependencies
 pip install -r requirements.txt
 
-# Optional: For binary compilation (CerberusAlt only)
+# Optional: For binary compilation (CerberusBin only)
 pip install nuitka
 ```
 
 ### Dependencies
 - `requests>=2.28.0` - For GitHub Gist API
 - `pycryptodome>=3.17.0` - For AES encryption
-- `nuitka` (optional) - For binary compilation in CerberusAlt
+- `nuitka` (optional) - For binary compilation in CerberusBin
 
 ## Usage
 
@@ -135,8 +135,8 @@ python cerberusbin.py -i input_file.py -o output_file.py --no-debug-checks
 - `-i, --input`: Python file to obfuscate
 - `-o, --output`: Output file for obfuscated code
 - `--token`: GitHub Personal Access Token (optional, enables one-time execution via Gist)
-- `--binary`: (CerberusAlt only) Compile to binary using Nuitka
-- `--no-debug-checks`: (CerberusAlt only) Disable anti-debug mechanisms
+- `--binary`: (CerberusBin only) Compile to binary using Nuitka
+- `--no-debug-checks`: (CerberusBin only) Disable anti-debug mechanisms
 
 ### Execution Modes
 
@@ -331,7 +331,7 @@ def process_data():
             OoO0 = 3
 ```
 
-#### CerberusAlt Advanced:
+#### CerberusBin:
 ```python
 # After Advanced CFF with randomized jumps
 def process_data():
@@ -360,13 +360,13 @@ message = "Hello World"
 message = O0o0O0o("U2FsdGVkX1+2x3y4z5a6b7c8d9e0f1g2h3i4j5k6l7m8n9o0")
 ```
 
-#### CerberusAlt (AES-256-CBC + PBKDF2):
+#### CerberusBin (Unified with Original):
 ```python
 # Original
 message = "Hello World"
 
-# After advanced obfuscation
-message = getattr(__builtins__, "O0O0o0O0").decrypt("Vm0weFYyRnRVa2hUVkVaWVZteE9l...")
+# After unified obfuscation (same as Cerberus Original)
+message = O0o0O0o("U2FsdGVkX1+2x3y4z5a6b7c8d9e0f1g2h3i4j5k6l7m8n9o0")
 ```
 
 ### One-Time Execution Protection
@@ -377,7 +377,7 @@ Both tools implement one-time execution, but with different security levels:
 2. If status = "UNUSED", program continues and changes status to "USED"
 3. If status = "USED" or no internet, program exits
 
-#### CerberusAlt Advanced:
+#### CerberusBin:
 1. Program checks status in **private** GitHub Gist with metadata validation
 2. Validates expiration timestamp and client information
 3. Multiple validation requests to detect monitoring
@@ -395,7 +395,7 @@ Both tools implement one-time execution, but with different security levels:
 - **State machine obfuscation**: Control flow obfuscation with state machines
 - **Multiple encoding layers**: Multi-layer encoding protection
 
-### CerberusAlt Advanced - Military-Grade Protection
+### CerberusBin - Enhanced Protection
 - **Enhanced anti-tampering**: SHA3-256 salted hash with file modification monitoring
 - **Advanced anti-debug**: Thread-based monitoring with process detection
 - **Memory protection**: Defense against memory analysis tools
@@ -409,7 +409,7 @@ Both tools implement one-time execution, but with different security levels:
 - **Internet dependency**: Requires internet connection for execution
 - **GitHub Gist validation**: External validation system
 - **Fail-closed security model**: Program exits on any security breach
-- **Private Gist metadata**: (CerberusAlt) Enhanced validation with encrypted metadata
+- **Private Gist metadata**: (CerberusBin) Enhanced validation with encrypted metadata
 
 ## Important Warnings
 
