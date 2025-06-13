@@ -17,6 +17,7 @@ Dependencies:
 - requests (optional, only needed with --token)
 - pycryptodome
 - nuitka (optional, for binary compilation)
+- psutil (optional, for RAM detection and anti-debug features)
 
 Usage:
 # With GitHub Gist (one-time execution):
@@ -531,6 +532,23 @@ exec({func_names['decode_payload']}())'''
         import subprocess
         import shutil
         
+        # Check system RAM for low-memory optimization
+        try:
+            import psutil
+            total_ram_gb = psutil.virtual_memory().total / (1024**3)  # Convert to GB
+            use_low_memory = total_ram_gb < 8.0  # Use low-memory if less than 8GB RAM
+            print(f"  [*] System RAM: {total_ram_gb:.1f}GB")
+            if use_low_memory:
+                print(f"  [*] Low RAM detected, enabling --low-memory optimization")
+            else:
+                print(f"  [*] Sufficient RAM available, using standard compilation")
+        except ImportError:
+            print("  [*] psutil not available, assuming sufficient RAM")
+            use_low_memory = False
+        except Exception:
+            print("  [*] Unable to detect RAM, assuming sufficient memory")
+            use_low_memory = False
+        
         # Check if Nuitka is available
         nuitka_cmds = ['nuitka3', 'nuitka', 'python -m nuitka']
         nuitka_cmd = None
@@ -576,26 +594,31 @@ exec({func_names['decode_payload']}())'''
                 # Fallback to temp file name without .py
                 binary_name = temp_file.replace('.py', '')
             
-            if nuitka_cmd.startswith('python'):
-                cmd = [
-                    'python', '-m', 'nuitka',
-                    '--onefile',
-                    '--remove-output',
-                    '--no-pyi-file',
-                    f'--output-filename={binary_name}',
-                    temp_file
-                ]
-            else:
-                cmd = [
-                    nuitka_cmd,
-                    '--onefile',
-                    '--remove-output',
-                    '--no-pyi-file',
-                    f'--output-filename={binary_name}',
-                    temp_file
-                ]
+            # Prepare base command arguments
+            base_args = [
+                '--onefile',
+                '--remove-output',
+                '--no-pyi-file'
+            ]
             
-            print(f"  [*] Compiling with Nuitka ({nuitka_cmd})...")
+            # Add low-memory flag only if system has limited RAM
+            if use_low_memory:
+                base_args.append('--low-memory')
+            
+            base_args.extend([
+                f'--output-filename={binary_name}',
+                temp_file
+            ])
+            
+            if nuitka_cmd.startswith('python'):
+                cmd = ['python', '-m', 'nuitka'] + base_args
+            else:
+                cmd = [nuitka_cmd] + base_args
+            
+            if use_low_memory:
+                print(f"  [*] Compiling with Nuitka ({nuitka_cmd}) using --low-memory...")
+            else:
+                print(f"  [*] Compiling with Nuitka ({nuitka_cmd}) using standard settings...")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             # Clean up temp file
