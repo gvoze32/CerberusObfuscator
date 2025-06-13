@@ -27,6 +27,7 @@ import argparse
 import base64
 import binascii
 import hashlib
+import json
 import marshal
 import os
 import random
@@ -35,13 +36,13 @@ import sys
 import time
 import zlib
 import subprocess
+from datetime import datetime
 from typing import Dict, List, Set, Any, Optional
 import requests
-from Cryptodome.Cipher import AES
-from Cryptodome.Protocol.KDF import PBKDF2
-from Cryptodome.Random import get_random_bytes
-from Cryptodome.Util.Padding import pad, unpad
-
+from Crypto.Cipher import AES
+from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 
 class CerberusAltObfuscator:
     def __init__(self, github_token: str, use_binary: bool = False):
@@ -74,7 +75,7 @@ class CerberusAltObfuscator:
     def apply_anti_debug_checks(self) -> str:
         """Generate anti-debug and self-tamper detection code"""
         return f'''
-import sys, os, time, threading, psutil, gc
+import sys, os, time, threading, gc
 from datetime import datetime
 
 def {self.generate_obfuscated_name()}():
@@ -84,9 +85,13 @@ def {self.generate_obfuscated_name()}():
     
     # Check for debugging tools
     try:
+        import psutil
         for proc in psutil.process_iter(['pid', 'name']):
             if any(dbg in proc.info['name'].lower() for dbg in ['gdb', 'lldb', 'ida', 'ollydbg', 'x64dbg']):
                 os._exit(0)
+    except ImportError:
+        # psutil not available, skip process check
+        pass
     except:
         pass
     
@@ -346,9 +351,9 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
         
         loader_template = f'''# CerberusAlt Protected Code - Advanced Security
 import sys,base64,binascii,zlib,marshal,hashlib,requests,os,time,json,threading,random
-from Cryptodome.Cipher import AES
-from Cryptodome.Protocol.KDF import PBKDF2
-from Cryptodome.Util.Padding import unpad
+from Crypto.Cipher import AES
+from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Util.Padding import unpad
 
 {anti_debug_code}
 

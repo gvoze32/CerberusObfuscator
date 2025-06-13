@@ -25,9 +25,9 @@ import sys
 import zlib
 from typing import Dict, List, Set, Any
 import requests
-from Cryptodome.Cipher import AES
-from Cryptodome.Random import get_random_bytes
-from Cryptodome.Util.Padding import pad, unpad
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 
 
 class CerberusObfuscator:
@@ -190,8 +190,8 @@ class CerberusObfuscator:
         
         # Create AES decryption function for strings
         aes_decrypt_func = f'''def {func_decrypt_str}(encrypted_b64):
- from Cryptodome.Cipher import AES
- from Cryptodome.Util.Padding import unpad
+ from Crypto.Cipher import AES
+ from Crypto.Util.Padding import unpad
  import base64
  key = bytes({list(self.aes_key)})
  encrypted = base64.b64decode(encrypted_b64)
