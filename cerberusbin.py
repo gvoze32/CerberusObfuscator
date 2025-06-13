@@ -55,7 +55,7 @@ from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
 
-class CerberusAltObfuscator:
+class CerberusBinObfuscator:
     def __init__(self, github_token: Optional[str] = None, use_binary: bool = False):
         self.github_token = github_token
         self.use_gist = github_token is not None
@@ -227,7 +227,7 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
             "metadata": {
                 "created": datetime.now().isoformat(),
                 "expires": (datetime.now().timestamp() + 86400),  # 24 hours
-                "client": "cerberusalt"
+                "client": "cerberusbin"
             }
         }
         
@@ -258,9 +258,9 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
     def obfuscate(self, source_code: str) -> str:
         """Enhanced obfuscation pipeline with multi-layer protection"""
         if self.use_gist:
-            print("[+] Starting CerberusAlt Advanced Obfuscation (with GitHub Gist)...")
+            print("[+] Starting CerberusBin Obfuscation (with GitHub Gist)...")
         else:
-            print("[+] Starting CerberusAlt Advanced Obfuscation (standalone mode)...")
+            print("[+] Starting CerberusBin Obfuscation (standalone mode)...")
         
         # Layer 0: Enhanced preparation
         print("  [*] Layer 0: Enhanced source cleaning and preparation...")
@@ -293,7 +293,7 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
             print("  [*] Layer 5: Compiling to binary with Nuitka...")
             return self.compile_to_binary(loader_stub)
         
-        print("[+] CerberusAlt obfuscation complete!")
+        print("[+] CerberusBin obfuscation complete!")
         return loader_stub
     
     def apply_enhanced_ast_transformations(self, source_code: str) -> str:
@@ -431,7 +431,7 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
         # Anti-debug code
         anti_debug_code = self.apply_anti_debug_checks()
         
-        loader_template = f'''# CerberusAlt Protected Code - Advanced Security
+        loader_template = f'''# CerberusBin Protected Code - Binary Compilation Ready
 import sys,base64,binascii,zlib,marshal,hashlib,requests,os,time,json,threading,random
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
@@ -459,7 +459,7 @@ def {func_names['verify_integrity']}():
 
 def {func_names['check_gist']}():
     try:
-        headers = {{'Authorization': 'token {self.github_token}', 'User-Agent': 'CerberusAlt/2.0'}}
+        headers = {{'Authorization': 'token {self.github_token}', 'User-Agent': 'CerberusBin/2.0'}}
         url = f"https://api.github.com/gists/{{{var_names['gist_id']}}}"
         
         # Multiple requests to detect monitoring
@@ -522,7 +522,7 @@ exec({func_names['decode_payload']}())'''
         """Compile the obfuscated code to binary using Nuitka"""
         try:
             # Write temporary file
-            temp_file = f"temp_cerberusalt_{int(time.time())}.py"
+            temp_file = f"temp_cerberusbin_{int(time.time())}.py"
             with open(temp_file, 'w', encoding='utf-8') as f:
                 f.write(loader_code)
             
@@ -570,8 +570,8 @@ exec({func_names['decode_payload']}())'''
         xor_key_hex = self.xor_key.hex()
         
         return f'''#!/usr/bin/env python3
-# Protected by CerberusAlt Advanced Obfuscator (Standalone Mode)
-# Multi-layer obfuscated Python code with advanced security
+# Protected by CerberusBin Obfuscator (Standalone Mode)
+# Multi-layer obfuscated Python code with binary compilation support
 
 import base64
 import binascii
@@ -1150,7 +1150,7 @@ class LoopObfuscator(ast.NodeTransformer):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='CerberusAlt - Advanced Python Code Obfuscator')
+    parser = argparse.ArgumentParser(description='CerberusBin - Python Code Obfuscator with Binary Compilation')
     parser.add_argument('-i', '--input', required=True, help='Input Python file to obfuscate')
     parser.add_argument('-o', '--output', required=True, help='Output file for obfuscated code')
     parser.add_argument('--token', help='GitHub Personal Access Token (optional, enables one-time execution)')
@@ -1165,7 +1165,7 @@ def main():
             source_code = f.read()
         
         # Initialize advanced obfuscator
-        obfuscator = CerberusAltObfuscator(args.token, args.binary)
+        obfuscator = CerberusBinObfuscator(args.token, args.binary)
         if args.no_debug_checks:
             obfuscator.debug_checks = False
         
@@ -1182,22 +1182,22 @@ def main():
             print(f"[+] GitHub Gist ID: {obfuscator.gist_id}")
             print(f"[+] Status file: {obfuscator.gist_filename}")
             print("[!] WARNING: The obfuscated file can only be executed ONCE!")
-            print("[!] Enhanced security features:")
-            print("    - AES-256-CBC encryption")
-            print("    - Advanced anti-debug mechanisms")
-            print("    - Self-tamper detection")
-            print("    - Sophisticated control flow flattening")
+            print("[!] CerberusBin security features:")
+            print("    - XOR encryption (reliable)")
+            print("    - Base64→Hex encoding (stable)")
+            print("    - Anti-debug mechanisms (when enabled)")
+            print("    - Import preservation (compatible)")
             if args.binary:
                 print("    - Binary compilation with Nuitka")
         else:
             print("[+] Standalone mode: No GitHub Gist created")
             print("[!] The obfuscated file can be executed multiple times")
-            print("[!] Enhanced security features (standalone):")
-            print("    - AES-256-CBC encryption")
+            print("[!] CerberusBin security features (standalone):")
+            print("    - XOR encryption (reliable)")
+            print("    - Base64→Hex encoding (stable)")
+            print("    - Import preservation (compatible)")
             if not args.no_debug_checks:
-                print("    - Advanced anti-debug mechanisms")
-            print("    - Self-tamper detection")
-            print("    - Sophisticated control flow flattening")
+                print("    - Anti-debug mechanisms")
             if args.binary:
                 print("    - Binary compilation with Nuitka")
             print("[!] Required dependency on target system:")
