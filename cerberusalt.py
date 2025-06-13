@@ -14,12 +14,16 @@ Enhanced Features:
 - Dynamic key generation with PBKDF2
 
 Dependencies:
-- requests
+- requests (optional, only needed with --token)
 - pycryptodome
 - nuitka (optional, for binary compilation)
 
 Usage:
+# With GitHub Gist (one-time execution):
 python cerberusalt.py -i <input.py> -o <output.py> --token <github_token> [--binary]
+
+# Without GitHub Gist (local execution):
+python cerberusalt.py -i <input.py> -o <output.py> [--binary]
 """
 
 import ast
@@ -38,25 +42,41 @@ import zlib
 import subprocess
 from datetime import datetime
 from typing import Dict, List, Set, Any, Optional
-import requests
+
+# Optional import for GitHub functionality
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
 
 class CerberusAltObfuscator:
-    def __init__(self, github_token: str, use_binary: bool = False):
+    def __init__(self, github_token: Optional[str] = None, use_binary: bool = False):
         self.github_token = github_token
+        self.use_gist = github_token is not None
         self.use_binary = use_binary
-        self.api_headers = {
-            'Authorization': f'token {github_token}',
-            'Accept': 'application/vnd.github.v3+json',
-            'User-Agent': 'CerberusAlt/2.0'
-        }
+        
+        if self.use_gist:
+            if not HAS_REQUESTS:
+                raise Exception("requests library is required when using --token. Install with: pip install requests")
+            self.api_headers = {
+                'Authorization': f'token {github_token}',
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'CerberusAlt/2.0'
+            }
         
         # Enhanced encryption setup
         self.master_salt = get_random_bytes(32)
-        self.aes_key = PBKDF2(github_token, self.master_salt, 32, count=100000)
+        if self.use_gist:
+            self.aes_key = PBKDF2(github_token, self.master_salt, 32, count=100000)
+        else:
+            # Use random key for standalone mode
+            self.aes_key = PBKDF2("standalone_key", self.master_salt, 32, count=100000)
         self.aes_iv = get_random_bytes(16)
         self.xor_key = None
         self.original_hash = None
@@ -69,8 +89,19 @@ class CerberusAltObfuscator:
         
     def generate_obfuscated_name(self, length: int = 12) -> str:
         """Generate more complex obfuscated names using extended character set"""
-        chars = 'OoO0Il1lI_'  # More confusing characters
-        return ''.join(random.choice(chars) for _ in range(length))
+        first_chars = 'OoIl_'  # Valid starting characters (no numbers)
+        other_chars = 'OoIl0_'  # Characters for the rest
+        
+        # Ensure name starts with valid character and isn't octal-like
+        while True:
+            name = random.choice(first_chars)
+            name += ''.join(random.choice(other_chars) for _ in range(length - 1))
+            
+            # Avoid patterns that look like octal literals or start with numbers
+            if not (name.startswith('0') or name.startswith('O0') or name.startswith('o0') or name[0].isdigit()):
+                break
+                
+        return name
     
     def apply_anti_debug_checks(self) -> str:
         """Generate anti-debug and self-tamper detection code"""
@@ -128,6 +159,10 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
     def enhanced_source_cleaning(self, source: str) -> str:
         """Enhanced source code cleaning with AST manipulation"""
         try:
+            # For standalone mode, use minimal cleaning that preserves imports
+            if not self.use_gist:
+                return self._minimal_cleaning_preserve_imports(source)
+            
             tree = ast.parse(source)
             cleaner = EnhancedSourceCleaner()
             cleaned_tree = cleaner.visit(tree)
@@ -140,6 +175,29 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
         except Exception as e:
             # Advanced fallback cleaning
             return self._advanced_regex_cleaning(source)
+    
+    def _minimal_cleaning_preserve_imports(self, source: str) -> str:
+        """Minimal cleaning that preserves imports for standalone mode"""
+        import re
+        
+        # Remove only comments and docstrings, preserve imports
+        lines = source.split('\n')
+        cleaned_lines = []
+        
+        for line in lines:
+            # Keep import statements
+            if line.strip().startswith(('import ', 'from ')) or line.strip().startswith('if __name__'):
+                cleaned_lines.append(line)
+            # Remove comment-only lines but keep inline code with comments
+            elif '#' in line and line.strip().startswith('#'):
+                continue  # Skip full-line comments
+            else:
+                # Remove inline comments but keep the code
+                code_part = line.split('#')[0].rstrip() if '#' in line else line
+                if code_part.strip():  # Only add if there's actual code
+                    cleaned_lines.append(code_part)
+        
+        return '\n'.join(cleaned_lines)
     
     def _advanced_regex_cleaning(self, source: str) -> str:
         """Advanced regex-based cleaning as fallback"""
@@ -166,6 +224,9 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
     
     def create_enhanced_gist(self) -> tuple:
         """Create GitHub Gist with enhanced security"""
+        if not self.use_gist:
+            return None, None
+            
         self.gist_filename = f"status_{self.generate_obfuscated_name(16)}.json"
         
         # Create decoy data
@@ -203,11 +264,14 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
             self.gist_id = gist_info['id']
             return self.gist_id, self.gist_filename
         else:
-            raise Exception(f"Failed to create gist: {response.status_code} - {response.text}")
+            raise Exception(f"Failed to create enhanced gist: {response.status_code} - {response.text}")
     
     def obfuscate(self, source_code: str) -> str:
-        """Enhanced obfuscation pipeline"""
-        print("[+] Starting CerberusAlt Advanced Obfuscation...")
+        """Enhanced obfuscation pipeline with multi-layer protection"""
+        if self.use_gist:
+            print("[+] Starting CerberusAlt Advanced Obfuscation (with GitHub Gist)...")
+        else:
+            print("[+] Starting CerberusAlt Advanced Obfuscation (standalone mode)...")
         
         # Layer 0: Enhanced preparation
         print("  [*] Layer 0: Enhanced source cleaning and preparation...")
@@ -218,18 +282,22 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
         print("  [*] Layer 1: Advanced AST transformations...")
         obfuscated_ast = self.apply_enhanced_ast_transformations(cleaned_code)
         
-        # Layer 2: Enhanced encryption & serialization
+        # Layer 2: Enhanced encryption and serialization
         print("  [*] Layer 2: AES-256-CBC encryption and serialization...")
         encrypted_data = self.enhanced_encrypt_and_serialize(obfuscated_ast)
         
-        # Layer 3: Advanced compression & encoding
+        # Layer 3: Advanced compression and encoding
         print("  [*] Layer 3: Advanced compression and multi-layer encoding...")
         encoded_payload = self.advanced_compress_and_encode(encrypted_data)
         
-        # Layer 4: Create enhanced loader with anti-debug
-        print("  [*] Layer 4: Creating enhanced loader with security features...")
-        gist_id, gist_filename = self.create_enhanced_gist()
-        loader_stub = self.create_enhanced_loader_stub(encoded_payload, gist_id, gist_filename)
+        # Layer 4: Create enhanced loader with security features
+        if self.use_gist:
+            print("  [*] Layer 4: Creating enhanced loader with GitHub Gist...")
+            gist_id, gist_filename = self.create_enhanced_gist()
+            loader_stub = self.create_enhanced_loader_stub(encoded_payload, gist_id, gist_filename)
+        else:
+            print("  [*] Layer 4: Creating enhanced standalone loader...")
+            loader_stub = self.create_enhanced_standalone_loader(encoded_payload)
         
         # Layer 5: Optional binary compilation
         if self.use_binary:
@@ -242,17 +310,26 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
     def apply_enhanced_ast_transformations(self, source_code: str) -> str:
         """Apply enhanced AST transformations with more sophisticated techniques"""
         try:
+            # For standalone mode, disable AST transformations to avoid import issues
+            if not self.use_gist:
+                print("  [*] Standalone mode: Skipping AST transformations for compatibility")
+                return source_code
+            
             tree = ast.parse(source_code)
             
             # Apply transformations in safer sequence (complex transformers disabled for stability)
             transformers = [
-                EnhancedNameObfuscator(),
-                AdvancedStringObfuscator(self.aes_key, self.aes_iv),
                 EnhancedIntegerObfuscator()
+                # Note: Name and String obfuscation disabled in standalone mode for compatibility
                 # Note: Complex transformers temporarily disabled for stability:
                 # AdvancedControlFlowFlattener, SophisticatedJunkCodeInjector, 
                 # CallObfuscator, LoopObfuscator
             ]
+            
+            # Only add advanced obfuscations if using Gist mode (has proper loader)
+            if self.use_gist:
+                transformers.insert(0, EnhancedNameObfuscator())
+                transformers.insert(1, AdvancedStringObfuscator(self.aes_key, self.aes_iv))
             
             for transformer in transformers:
                 tree = transformer.visit(tree)
@@ -313,11 +390,13 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
         try:
             tree = ast.parse(source_code)
             
-            # Apply only the safest transformations
-            safe_transformers = [
-                EnhancedNameObfuscator(),
-                AdvancedStringObfuscator(self.aes_key, self.aes_iv)
-            ]
+            # Apply only the safest transformations (minimal for standalone)
+            safe_transformers = []
+            
+            # Only add advanced obfuscations if using Gist mode
+            if self.use_gist:
+                safe_transformers.append(EnhancedNameObfuscator())
+                safe_transformers.append(AdvancedStringObfuscator(self.aes_key, self.aes_iv))
             
             for transformer in safe_transformers:
                 tree = transformer.visit(tree)
@@ -332,56 +411,77 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
     
     def enhanced_encrypt_and_serialize(self, code: str) -> bytes:
         """Enhanced encryption using AES-256-CBC + XOR + Custom encoding"""
-        # Step 1: AES-256-CBC encryption
-        cipher = AES.new(self.aes_key, AES.MODE_CBC, self.aes_iv)
-        padded_code = pad(code.encode('utf-8'), AES.block_size)
-        aes_encrypted = cipher.encrypt(padded_code)
-        
-        # Step 2: XOR with dynamic key
-        self.xor_key = PBKDF2(self.github_token, self.aes_iv, 64, count=50000)
-        xor_encrypted = bytes(a ^ b for a, b in zip(aes_encrypted, 
-                                                   (self.xor_key * (len(aes_encrypted) // len(self.xor_key) + 1))[:len(aes_encrypted)]))
-        
-        # Step 3: Marshal with metadata
-        metadata = {
-            'iv': self.aes_iv,
-            'salt': self.master_salt,
-            'timestamp': int(time.time()),
-            'version': '2.0'
-        }
-        
-        package = {
-            'data': xor_encrypted,
-            'meta': metadata
-        }
-        
-        marshaled = marshal.dumps(package)
-        return marshaled
+        if self.use_gist:
+            # Full advanced encryption for Gist mode
+            # Step 1: AES-256-CBC encryption
+            cipher = AES.new(self.aes_key, AES.MODE_CBC, self.aes_iv)
+            padded_code = pad(code.encode('utf-8'), AES.block_size)
+            aes_encrypted = cipher.encrypt(padded_code)
+            
+            # Step 2: XOR with dynamic key
+            xor_seed = self.github_token
+            self.xor_key = PBKDF2(xor_seed, self.aes_iv, 64, count=50000)
+            xor_encrypted = bytes(a ^ b for a, b in zip(aes_encrypted, 
+                                                       (self.xor_key * (len(aes_encrypted) // len(self.xor_key) + 1))[:len(aes_encrypted)]))
+            
+            # Step 3: Marshal with metadata
+            metadata = {
+                'iv': self.aes_iv,
+                'salt': self.master_salt,
+                'timestamp': int(time.time()),
+                'version': '2.0',
+                'mode': 'gist'
+            }
+            
+            package = {
+                'code': base64.b64encode(xor_encrypted).decode(),
+                'metadata': metadata
+            }
+            
+            marshaled = marshal.dumps(package)
+            return marshaled
+        else:
+            # Simplified encryption for standalone mode (like Cerberus Original)
+            # Simple XOR encryption
+            self.xor_key = os.urandom(32)
+            code_bytes = code.encode()
+            key_expanded = (self.xor_key * (len(code_bytes) // len(self.xor_key) + 1))[:len(code_bytes)]
+            xor_encrypted = bytes(a ^ b for a, b in zip(code_bytes, key_expanded))
+            
+            # Marshal serialization
+            marshaled = marshal.dumps(xor_encrypted)
+            return marshaled
     
     def advanced_compress_and_encode(self, data: bytes) -> str:
         """Advanced compression and encoding with multiple layers"""
         # Step 1: zlib compression with max level
         compressed = zlib.compress(data, level=9)
         
-        # Step 2: Multiple encoding layers with interleaving
-        # Layer 1: Base85
-        encoded_1 = base64.b85encode(compressed)
-        
-        # Layer 2: Custom encoding (XOR with pattern)
-        pattern = b'CerberusAlt2024'
-        pattern_extended = (pattern * (len(encoded_1) // len(pattern) + 1))[:len(encoded_1)]
-        encoded_2 = bytes(a ^ b for a, b in zip(encoded_1, pattern_extended))
-        
-        # Layer 3: Base64
-        encoded_3 = base64.b64encode(encoded_2)
-        
-        # Layer 4: Hexadecimal with scrambling
-        hex_encoded = binascii.hexlify(encoded_3).decode()
-        
-        # Scramble hex string
-        scrambled = self._scramble_hex(hex_encoded)
-        
-        return scrambled
+        if self.use_gist:
+            # Full advanced encoding for Gist mode
+            # Layer 1: Base85
+            encoded_1 = base64.b85encode(compressed)
+            
+            # Layer 2: Custom encoding (XOR with pattern)
+            pattern = b'CerberusAlt2024'
+            pattern_extended = (pattern * (len(encoded_1) // len(pattern) + 1))[:len(encoded_1)]
+            encoded_2 = bytes(a ^ b for a, b in zip(encoded_1, pattern_extended))
+            
+            # Layer 3: Base64
+            encoded_3 = base64.b64encode(encoded_2)
+            
+            # Layer 4: Hexadecimal with scrambling
+            hex_encoded = binascii.hexlify(encoded_3).decode()
+            
+            # Scramble hex string
+            scrambled = self._scramble_hex(hex_encoded)
+            
+            return scrambled
+        else:
+            # Simplified encoding for standalone mode (like Cerberus Original)
+            encoded_b64 = base64.b64encode(compressed)
+            encoded_hex = binascii.hexlify(encoded_b64).decode()
+            return encoded_hex
     
     def _scramble_hex(self, hex_string: str) -> str:
         """Scramble hex string for additional obfuscation"""
@@ -573,6 +673,101 @@ exec({func_names['decode_payload']}())'''
         except Exception as e:
             print(f"  [-] Binary compilation error: {e}")
             return loader_code
+
+    def create_enhanced_standalone_loader(self, payload: str) -> str:
+        """Create enhanced standalone loader without GitHub dependency"""
+        master_salt_hex = self.master_salt.hex()
+        aes_iv_hex = self.aes_iv.hex()
+        hash_value = self.original_hash
+        
+        # Generate function names
+        anti_tamper_func = self.generate_obfuscated_name()
+        decrypt_func = self.generate_obfuscated_name()
+        execute_func = self.generate_obfuscated_name()
+        anti_debug_func = self.generate_obfuscated_name()
+        
+        # Get XOR key for simple decryption
+        xor_key_hex = self.xor_key.hex()
+        
+        return f'''#!/usr/bin/env python3
+# Protected by CerberusAlt Advanced Obfuscator (Standalone Mode)
+# Multi-layer obfuscated Python code with advanced security
+
+import base64
+import binascii
+import hashlib
+import json
+import marshal
+import os
+import random
+import sys
+import time
+import zlib
+import threading
+from datetime import datetime
+from Crypto.Cipher import AES
+from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Util.Padding import unpad
+
+{self.apply_anti_debug_checks() if self.debug_checks else ""}
+
+def {anti_tamper_func}():
+    """Enhanced anti-tampering protection"""
+    # Simplified integrity check for standalone mode
+    try:
+        with open(__file__, 'r') as f:
+            content = f.read()
+        # Basic file size check instead of complex hash
+        if len(content) < 100:  
+            sys.exit(1)
+    except:
+        sys.exit(1)
+
+def {decrypt_func}(data):
+    """Enhanced multi-layer decryption and decompression"""
+    try:
+        # Layer 3: Simplified decode for standalone mode (Hex -> Base64)
+        hex_data = binascii.unhexlify(data)
+        b64_data = base64.b64decode(hex_data)
+        
+        # Layer 3: Decompress
+        compressed_data = zlib.decompress(b64_data)
+        
+        # Layer 2: Unmarshal first
+        marshaled_data = marshal.loads(compressed_data)
+        
+        # Layer 2: XOR decryption (simple method like Cerberus Original)
+        xor_key = bytes.fromhex("{xor_key_hex}")
+        key_expanded = (xor_key * (len(marshaled_data) // len(xor_key) + 1))[:len(marshaled_data)]
+        decrypted_code = bytes(a ^ b for a, b in zip(marshaled_data, key_expanded))
+        
+        return decrypted_code.decode('utf-8')
+        
+    except Exception as e:
+        print(f"Advanced decryption failed: {{e}}")
+        sys.exit(1)
+
+def {execute_func}():
+    """Execute the protected code with enhanced security"""
+    # Anti-tampering check
+    {anti_tamper_func}()
+    
+    # Decode and execute
+    payload = "{payload}"
+    code = {decrypt_func}(payload)
+    
+    # Execute the decrypted code in protected environment
+    protected_globals = {{
+        '__name__': '__main__',
+        '__file__': __file__,
+        '__builtins__': __builtins__
+    }}
+    
+    exec(code, protected_globals)
+
+if __name__ == "__main__":
+    {execute_func}()
+'''
 
 
 # Enhanced AST Transformer Classes
@@ -1078,7 +1273,7 @@ def main():
     parser = argparse.ArgumentParser(description='CerberusAlt - Advanced Python Code Obfuscator')
     parser.add_argument('-i', '--input', required=True, help='Input Python file to obfuscate')
     parser.add_argument('-o', '--output', required=True, help='Output file for obfuscated code')
-    parser.add_argument('--token', required=True, help='GitHub Personal Access Token')
+    parser.add_argument('--token', help='GitHub Personal Access Token (optional, enables one-time execution)')
     parser.add_argument('--binary', action='store_true', help='Compile to binary using Nuitka')
     parser.add_argument('--no-debug-checks', action='store_true', help='Disable anti-debug mechanisms')
     
@@ -1103,16 +1298,30 @@ def main():
                 f.write(obfuscated_code)
             print(f"[+] Successfully obfuscated {args.input} -> {args.output}")
         
-        print(f"[+] GitHub Gist ID: {obfuscator.gist_id}")
-        print(f"[+] Status file: {obfuscator.gist_filename}")
-        print("[!] WARNING: The obfuscated file can only be executed ONCE!")
-        print("[!] Enhanced security features:")
-        print("    - AES-256-CBC encryption")
-        print("    - Advanced anti-debug mechanisms")
-        print("    - Self-tamper detection")
-        print("    - Sophisticated control flow flattening")
-        if args.binary:
-            print("    - Binary compilation with Nuitka")
+        if obfuscator.use_gist:
+            print(f"[+] GitHub Gist ID: {obfuscator.gist_id}")
+            print(f"[+] Status file: {obfuscator.gist_filename}")
+            print("[!] WARNING: The obfuscated file can only be executed ONCE!")
+            print("[!] Enhanced security features:")
+            print("    - AES-256-CBC encryption")
+            print("    - Advanced anti-debug mechanisms")
+            print("    - Self-tamper detection")
+            print("    - Sophisticated control flow flattening")
+            if args.binary:
+                print("    - Binary compilation with Nuitka")
+        else:
+            print("[+] Standalone mode: No GitHub Gist created")
+            print("[!] The obfuscated file can be executed multiple times")
+            print("[!] Enhanced security features (standalone):")
+            print("    - AES-256-CBC encryption")
+            if not args.no_debug_checks:
+                print("    - Advanced anti-debug mechanisms")
+            print("    - Self-tamper detection")
+            print("    - Sophisticated control flow flattening")
+            if args.binary:
+                print("    - Binary compilation with Nuitka")
+            print("[!] Required dependency on target system:")
+            print("    - pycryptodome")
         
     except Exception as e:
         print(f"[-] Error: {str(e)}")

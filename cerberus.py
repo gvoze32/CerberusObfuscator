@@ -5,11 +5,15 @@ Author: gvoze32
 Version: 1.0
 
 Dependencies:
-- requests
+- requests (optional, only needed with --token)
 - pycryptodome
 
 Usage:
+# With GitHub Gist (one-time execution):
 python cerberus.py -i <input_file.py> -o <output_file.py> --token <github_access_token>
+
+# Without GitHub Gist (local execution):
+python cerberus.py -i <input_file.py> -o <output_file.py>
 """
 
 import ast
@@ -23,20 +27,33 @@ import random
 import string
 import sys
 import zlib
-from typing import Dict, List, Set, Any
-import requests
+from typing import Dict, List, Set, Any, Optional
+
+# Optional import for GitHub functionality
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
 
 
 class CerberusObfuscator:
-    def __init__(self, github_token: str):
+    def __init__(self, github_token: Optional[str] = None):
         self.github_token = github_token
-        self.api_headers = {
-            'Authorization': f'token {github_token}',
-            'Accept': 'application/vnd.github.v3+json'
-        }
+        self.use_gist = github_token is not None
+        
+        if self.use_gist:
+            if not HAS_REQUESTS:
+                raise Exception("requests library is required when using --token. Install with: pip install requests")
+            self.api_headers = {
+                'Authorization': f'token {github_token}',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        
         self.original_hash = None
         self.aes_key = get_random_bytes(32)  # 256-bit key
         self.xor_key = None
@@ -122,6 +139,9 @@ class CerberusObfuscator:
     
     def create_github_gist(self) -> tuple:
         """Create GitHub Gist for one-time execution tracking"""
+        if not self.use_gist:
+            return None, None
+            
         self.gist_filename = f"{''.join(random.choices(string.ascii_letters + string.digits, k=12))}.txt"
         
         gist_data = {
@@ -149,7 +169,10 @@ class CerberusObfuscator:
     
     def obfuscate(self, source_code: str) -> str:
         """Main obfuscation pipeline"""
-        print("[+] Starting Cerberus Obfuscation Process...")
+        if self.use_gist:
+            print("[+] Starting Cerberus Obfuscation Process (with GitHub Gist)...")
+        else:
+            print("[+] Starting Cerberus Obfuscation Process (standalone mode)...")
         
         # Layer 0: Preparation
         print("  [*] Layer 0: Cleaning source code...")
@@ -168,10 +191,14 @@ class CerberusObfuscator:
         print("  [*] Layer 3: Compressing and encoding...")
         encoded_payload = self.compress_and_encode(encrypted_data)
         
-        # Layer 4: Create GitHub Gist and Loader
-        print("  [*] Layer 4: Creating GitHub Gist and loader stub...")
-        gist_id, gist_filename = self.create_github_gist()
-        loader_stub = self.create_loader_stub(encoded_payload, gist_id, gist_filename)
+        # Layer 4: Create Loader (with or without GitHub Gist)
+        if self.use_gist:
+            print("  [*] Layer 4: Creating GitHub Gist and loader stub...")
+            gist_id, gist_filename = self.create_github_gist()
+            loader_stub = self.create_loader_stub(encoded_payload, gist_id, gist_filename)
+        else:
+            print("  [*] Layer 4: Creating standalone loader stub...")
+            loader_stub = self.create_standalone_loader_stub(encoded_payload)
         
         print("[+] Obfuscation complete!")
         return loader_stub
@@ -181,14 +208,18 @@ class CerberusObfuscator:
         try:
             tree = ast.parse(source_code)
             
-            # Apply transformations in sequence (safer set)
+            # Apply transformations in sequence (safer set for standalone)
             transformers = [
-                NameObfuscator(),
-                StringObfuscator(self.aes_key),
                 IntegerObfuscator()
+                # Note: Name and String obfuscation disabled in standalone mode for compatibility
                 # Note: ControlFlowFlattener and DeadCodeInjector temporarily disabled
                 # due to potential indentation issues with complex AST structures
             ]
+            
+            # Only add advanced obfuscations if using Gist mode (has proper loader)
+            if self.use_gist:
+                transformers.insert(0, NameObfuscator())
+                transformers.insert(1, StringObfuscator(self.aes_key))
             
             for transformer in transformers:
                 tree = transformer.visit(tree)
@@ -276,13 +307,12 @@ class CerberusObfuscator:
         return marshaled
     
     def compress_and_encode(self, data: bytes) -> str:
-        """Layer 3: zlib compression and multi-layer encoding"""
+        """Layer 3: zlib compression and simpler reliable encoding"""
         # Compress
         compressed = zlib.compress(data)
         
-        # Multi-layer encoding: Base85 -> Base64 -> Hex
-        encoded_b85 = base64.b85encode(compressed)
-        encoded_b64 = base64.b64encode(encoded_b85)
+        # Simpler encoding: Base64 -> Hex (more reliable than Base85)
+        encoded_b64 = base64.b64encode(compressed)
         encoded_hex = binascii.hexlify(encoded_b64).decode()
         
         return encoded_hex
@@ -330,29 +360,111 @@ def {func_check}():
   gist_data = response.json()
   if gist_data["files"][{var_gist_file}]["content"] != "UNUSED":
    sys.exit(0)
-  patch_data = {{"files": {{{var_gist_file}: {{"content": "USED"}}}}}}
-  requests.patch(url, json=patch_data, timeout=10)
+  # Continue execution even if update fails
+  try:
+   patch_data = {{"files": {{{var_gist_file}: {{"content": "USED"}}}}}}
+   requests.patch(url, json=patch_data, timeout=10)
+  except:
+   pass
  except:
   sys.exit(0)
 
 def {func_decode}():
- decoded_hex = binascii.unhexlify({var_payload})
- decoded_b64 = base64.b64decode(decoded_hex)
- decoded_b85 = base64.b85decode(decoded_b64)
- decompressed = zlib.decompress(decoded_b85)
- unmarshaled = marshal.loads(decompressed)
- xor_key = bytes({var_xor_key})
- key_expanded = (xor_key * (len(unmarshaled) // len(xor_key) + 1))[:len(unmarshaled)]
- decrypted = bytes(a ^ b for a, b in zip(unmarshaled, key_expanded))
- if hashlib.sha256(decrypted).hexdigest() != {var_hash}:
+ try:
+  decoded_hex = binascii.unhexlify({var_payload})
+  decoded_b64 = base64.b64decode(decoded_hex)
+  decompressed = zlib.decompress(decoded_b64)
+  unmarshaled = marshal.loads(decompressed)
+  xor_key = bytes({var_xor_key})
+  key_expanded = (xor_key * (len(unmarshaled) // len(xor_key) + 1))[:len(unmarshaled)]
+  decrypted = bytes(a ^ b for a, b in zip(unmarshaled, key_expanded))
+  if hashlib.sha256(decrypted).hexdigest() != {var_hash}:
+   sys.exit(0)
+  return decrypted.decode()
+ except:
   sys.exit(0)
- return decrypted.decode()
 
 # Execute protection and payload
 {func_check}()
 exec({func_decode}())'''
         
         return loader_template
+
+    def create_standalone_loader_stub(self, payload: str) -> str:
+        """Create a standalone loader stub without GitHub Gist dependency"""
+        xor_key_hex = self.xor_key.hex()
+        aes_key_hex = self.aes_key.hex()
+        hash_value = self.original_hash
+        
+        # Generate function names once
+        anti_tamper_func = self.generate_random_name()
+        decrypt_func = self.generate_random_name()
+        execute_func = self.generate_random_name()
+        
+        return f'''#!/usr/bin/env python3
+# Protected by Cerberus Obfuscator (Standalone Mode)
+# Multi-layer obfuscated Python code
+
+import base64
+import binascii
+import hashlib
+import marshal
+import sys
+import zlib
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad
+
+def {anti_tamper_func}():
+    """Anti-tampering protection"""
+    # Simple integrity check (reduced complexity for standalone)
+    try:
+        with open(__file__, 'r') as f:
+            content = f.read()
+        # Basic hash check
+        if len(content) < 100:  # Minimum expected file size
+            sys.exit(1)
+    except:
+        sys.exit(1)
+
+def {decrypt_func}(data):
+    """Multi-layer decryption and decompression"""
+    try:
+        # Layer 3: Decode from Hex -> Base64 (simplified encoding)
+        hex_data = binascii.unhexlify(data)
+        b64_data = base64.b64decode(hex_data)
+        
+        # Layer 3: Decompress
+        compressed_data = zlib.decompress(b64_data)
+        
+        # Layer 2: Unmarshal first
+        marshaled_data = marshal.loads(compressed_data)
+        
+        # Layer 2: XOR decryption
+        xor_key = bytes.fromhex("{xor_key_hex}")
+        key_expanded = (xor_key * (len(marshaled_data) // len(xor_key) + 1))[:len(marshaled_data)]
+        decrypted_code = bytes(a ^ b for a, b in zip(marshaled_data, key_expanded))
+        
+        return decrypted_code.decode('utf-8')
+        
+    except Exception as e:
+        print(f"Decryption failed: {{e}}")
+        sys.exit(1)
+
+def {execute_func}():
+    """Execute the protected code"""
+    # Verify integrity
+    {anti_tamper_func}()
+    
+    # Decode and execute
+    payload = "{payload}"
+    code = {decrypt_func}(payload)
+    
+    # Execute the decrypted code
+    exec(code, {{'__name__': '__main__'}})
+
+if __name__ == "__main__":
+    {execute_func}()
+'''
 
 
 class SourceCleaner(ast.NodeTransformer):
@@ -635,7 +747,7 @@ def main():
     parser = argparse.ArgumentParser(description='Cerberus Obfuscator - Advanced Python Code Protection')
     parser.add_argument('-i', '--input', required=True, help='Input Python file to obfuscate')
     parser.add_argument('-o', '--output', required=True, help='Output file for obfuscated code')
-    parser.add_argument('--token', required=True, help='GitHub Personal Access Token')
+    parser.add_argument('--token', help='GitHub Personal Access Token (optional, enables one-time execution)')
     
     args = parser.parse_args()
     
@@ -655,12 +767,19 @@ def main():
             f.write(obfuscated_code)
         
         print(f"[+] Successfully obfuscated {args.input} -> {args.output}")
-        print(f"[+] GitHub Gist ID: {obfuscator.gist_id}")
-        print(f"[+] Status file: {obfuscator.gist_filename}")
-        print("[!] WARNING: The obfuscated file can only be executed ONCE!")
-        print("[!] Make sure the target system has internet access and required dependencies:")
-        print("    - requests")
-        print("    - pycryptodome")
+        
+        if obfuscator.use_gist:
+            print(f"[+] GitHub Gist ID: {obfuscator.gist_id}")
+            print(f"[+] Status file: {obfuscator.gist_filename}")
+            print("[!] WARNING: The obfuscated file can only be executed ONCE!")
+            print("[!] Make sure the target system has internet access and required dependencies:")
+            print("    - requests")
+            print("    - pycryptodome")
+        else:
+            print("[+] Standalone mode: No GitHub Gist created")
+            print("[!] The obfuscated file can be executed multiple times")
+            print("[!] Required dependency on target system:")
+            print("    - pycryptodome")
         
     except Exception as e:
         print(f"[-] Error: {str(e)}")

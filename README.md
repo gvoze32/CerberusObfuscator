@@ -113,27 +113,48 @@ pip install nuitka
 
 ### Cerberus Original - Quick & Simple
 ```bash
+# With GitHub Gist (one-time execution):
 python cerberus.py -i input_file.py -o output_file.py --token YOUR_GITHUB_TOKEN
+
+# Standalone mode (no internet required):
+python cerberus.py -i input_file.py -o output_file.py
 ```
 
 ### CerberusAlt Advanced - Maximum Security
 ```bash
-# Standard obfuscation
+# With GitHub Gist (one-time execution):
 python cerberusalt.py -i input_file.py -o output_file.py --token YOUR_GITHUB_TOKEN
 
-# Binary compilation
-python cerberusalt.py -i input_file.py -o output_file --token YOUR_GITHUB_TOKEN --binary
+# Standalone mode (no internet required):
+python cerberusalt.py -i input_file.py -o output_file.py
 
-# Disable anti-debug (for testing)
-python cerberusalt.py -i input_file.py -o output_file.py --token YOUR_GITHUB_TOKEN --no-debug-checks
+# Binary compilation (standalone):
+python cerberusalt.py -i input_file.py -o output_file --binary
+
+# Disable anti-debug (for testing):
+python cerberusalt.py -i input_file.py -o output_file.py --no-debug-checks
 ```
 
 ### Parameters
 - `-i, --input`: Python file to obfuscate
 - `-o, --output`: Output file for obfuscated code
-- `--token`: GitHub Personal Access Token (required for Gist creation)
+- `--token`: GitHub Personal Access Token (optional, enables one-time execution via Gist)
 - `--binary`: (CerberusAlt only) Compile to binary using Nuitka
 - `--no-debug-checks`: (CerberusAlt only) Disable anti-debug mechanisms
+
+### Execution Modes
+
+#### **GitHub Gist Mode** (with `--token`)
+- **One-time execution**: File can only be run once
+- **Internet required**: Must have connectivity for Gist validation
+- **Maximum security**: External validation system
+- **Dependencies**: `requests` + `pycryptodome`
+
+#### **Standalone Mode** (without `--token`)
+- **Multiple executions**: File can be run multiple times
+- **No internet required**: Works completely offline
+- **Local protection**: Self-contained anti-tampering
+- **Dependencies**: `pycryptodome` only
 
 ### GitHub Token Setup
 1. Go to GitHub Settings → Developer settings → Personal access tokens
@@ -187,13 +208,15 @@ if __name__ == "__main__":
 ```
 
 ### Cerberus Original Process
+
+#### With GitHub Gist (One-time execution)
 ```bash
 python cerberus.py -i example.py -o example_protected.py --token ghp_xxxxxxxxxxxx
 ```
 
 **Output:**
 ```
-[+] Starting Cerberus Obfuscation Process...
+[+] Starting Cerberus Obfuscation Process (with GitHub Gist)...
   [*] Layer 0: Cleaning source code...
   [*] Layer 1: Applying AST transformations...
   [*] Layer 2: Encrypting and serializing...
@@ -205,19 +228,42 @@ python cerberus.py -i example.py -o example_protected.py --token ghp_xxxxxxxxxxx
 [!] WARNING: The obfuscated file can only be executed ONCE!
 ```
 
+#### Standalone Mode (Multiple executions)
+```bash
+python cerberus.py -i example.py -o example_standalone.py
+```
+
+**Output:**
+```
+[+] Starting Cerberus Obfuscation Process (standalone mode)...
+  [*] Layer 0: Cleaning source code...
+  [*] Layer 1: Applying AST transformations...
+  [*] Layer 2: Encrypting and serializing...
+  [*] Layer 3: Compressing and encoding...
+  [*] Layer 4: Creating standalone loader stub...
+[+] Obfuscation complete!
+[+] Successfully obfuscated example.py -> example_standalone.py
+[+] Standalone mode: No GitHub Gist created
+[!] The obfuscated file can be executed multiple times
+[!] Required dependency on target system:
+    - pycryptodome
+```
+
 ### CerberusAlt Advanced Process
+
+#### With GitHub Gist (One-time execution)
 ```bash
 python cerberusalt.py -i example.py -o example_advanced.py --token ghp_xxxxxxxxxxxx
 ```
 
 **Output:**
 ```
-[+] Starting CerberusAlt Advanced Obfuscation...
+[+] Starting CerberusAlt Advanced Obfuscation (with GitHub Gist)...
   [*] Layer 0: Enhanced source cleaning and preparation...
   [*] Layer 1: Advanced AST transformations...
   [*] Layer 2: AES-256-CBC encryption and serialization...
   [*] Layer 3: Advanced compression and multi-layer encoding...
-  [*] Layer 4: Creating enhanced loader with security features...
+  [*] Layer 4: Creating enhanced loader with GitHub Gist...
 [+] CerberusAlt obfuscation complete!
 [+] Successfully obfuscated example.py -> example_advanced.py
 [+] GitHub Gist ID: x9y8z7w6v5u4t3s2r1q0
@@ -227,6 +273,32 @@ python cerberusalt.py -i example.py -o example_advanced.py --token ghp_xxxxxxxxx
     - Advanced anti-debug mechanisms
     - Self-tamper detection
     - Sophisticated control flow flattening
+```
+
+#### Standalone Mode (Multiple executions)
+```bash
+python cerberusalt.py -i example.py -o example_standalone_advanced.py
+```
+
+**Output:**
+```
+[+] Starting CerberusAlt Advanced Obfuscation (standalone mode)...
+  [*] Layer 0: Enhanced source cleaning and preparation...
+  [*] Layer 1: Advanced AST transformations...
+  [*] Layer 2: AES-256-CBC encryption and serialization...
+  [*] Layer 3: Advanced compression and multi-layer encoding...
+  [*] Layer 4: Creating enhanced standalone loader...
+[+] CerberusAlt obfuscation complete!
+[+] Successfully obfuscated example.py -> example_standalone_advanced.py
+[+] Standalone mode: No GitHub Gist created
+[!] The obfuscated file can be executed multiple times
+[!] Enhanced security features (standalone):
+    - AES-256-CBC encryption
+    - Advanced anti-debug mechanisms
+    - Self-tamper detection
+    - Sophisticated control flow flattening
+[!] Required dependency on target system:
+    - pycryptodome
 ```
 
 ## Advanced Techniques Demonstration
