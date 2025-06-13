@@ -87,6 +87,9 @@ class CerberusBinObfuscator:
         self.debug_checks = True
         self.tamper_checks = True
         
+        # Output settings
+        self.output_path = None
+        
     def generate_obfuscated_name(self, length: int = 12) -> str:
         """Generate more complex obfuscated names using extended character set"""
         first_chars = 'OoIl_'  # Valid starting characters (no numbers)
@@ -293,7 +296,7 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
         # Layer 5: Optional binary compilation
         if self.use_binary:
             print("  [*] Layer 5: Compiling to binary with Nuitka...")
-            return self.compile_to_binary(loader_stub)
+            return self.compile_to_binary(loader_stub, self.output_path)
         
         print("[+] CerberusBin obfuscation complete!")
         return loader_stub
@@ -523,40 +526,103 @@ exec({func_names['decode_payload']}())'''
         
         return loader_template
     
-    def compile_to_binary(self, loader_code: str) -> str:
-        """Compile the obfuscated code to binary using Nuitka"""
+    def compile_to_binary(self, loader_code: str, output_path: str = None) -> str:
+        """Compile the obfuscated code to binary using Nuitka with fallbacks"""
+        import subprocess
+        import shutil
+        
+        # Check if Nuitka is available
+        nuitka_cmds = ['nuitka3', 'nuitka', 'python -m nuitka']
+        nuitka_cmd = None
+        
+        print("  [*] Checking for Nuitka availability...")
+        for cmd in nuitka_cmds:
+            try:
+                if cmd.startswith('python'):
+                    # Test with python -m nuitka
+                    test_result = subprocess.run(['python', '-m', 'nuitka', '--version'], 
+                                               capture_output=True, text=True, timeout=10)
+                else:
+                    # Test direct command
+                    test_result = subprocess.run([cmd, '--version'], 
+                                               capture_output=True, text=True, timeout=10)
+                
+                if test_result.returncode == 0:
+                    nuitka_cmd = cmd
+                    print(f"  [+] Found Nuitka: {cmd}")
+                    break
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+        
+        if not nuitka_cmd:
+            print("  [-] Nuitka not found. Please install Nuitka for binary compilation:")
+            print("      pip install nuitka")
+            print("      # or")
+            print("      pip install nuitka[all]")
+            print("  [*] Returning Python code instead of binary")
+            return loader_code
+        
         try:
             # Write temporary file
             temp_file = f"temp_cerberusbin_{int(time.time())}.py"
             with open(temp_file, 'w', encoding='utf-8') as f:
                 f.write(loader_code)
             
-            # Compile with Nuitka
-            binary_name = temp_file.replace('.py', '')
-            cmd = [
-                'nuitka3',
-                '--onefile',
-                '--remove-output',
-                '--no-pyi-file',
-                f'--output-filename={binary_name}',
-                temp_file
-            ]
+            # Determine binary name based on output_path or use temp name
+            if output_path:
+                # Remove .py extension if present and use as binary name
+                binary_name = output_path.replace('.py', '') if output_path.endswith('.py') else output_path
+            else:
+                # Fallback to temp file name without .py
+                binary_name = temp_file.replace('.py', '')
             
-            print("  [*] Compiling with Nuitka...")
+            if nuitka_cmd.startswith('python'):
+                cmd = [
+                    'python', '-m', 'nuitka',
+                    '--onefile',
+                    '--remove-output',
+                    '--no-pyi-file',
+                    f'--output-filename={binary_name}',
+                    temp_file
+                ]
+            else:
+                cmd = [
+                    nuitka_cmd,
+                    '--onefile',
+                    '--remove-output',
+                    '--no-pyi-file',
+                    f'--output-filename={binary_name}',
+                    temp_file
+                ]
+            
+            print(f"  [*] Compiling with Nuitka ({nuitka_cmd})...")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             # Clean up temp file
-            os.remove(temp_file)
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
             
             if result.returncode == 0:
                 print(f"  [+] Binary compiled successfully: {binary_name}")
                 return f"Binary compiled: {binary_name}"
             else:
                 print(f"  [-] Nuitka compilation failed: {result.stderr}")
+                print("  [*] Returning Python code instead")
                 return loader_code
                 
+        except subprocess.TimeoutExpired:
+            print("  [-] Nuitka compilation timed out")
+            print("  [*] Returning Python code instead")
+            # Clean up temp file
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            return loader_code
         except Exception as e:
             print(f"  [-] Binary compilation error: {e}")
+            print("  [*] Returning Python code instead")
+            # Clean up temp file
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
             return loader_code
 
     def create_enhanced_standalone_loader(self, payload: str) -> str:
@@ -1169,6 +1235,7 @@ def main():
         
         # Initialize advanced obfuscator
         obfuscator = CerberusBinObfuscator(args.token, args.binary)
+        obfuscator.output_path = args.output  # Set output path for binary compilation
         if args.no_debug_checks:
             obfuscator.debug_checks = False
         
