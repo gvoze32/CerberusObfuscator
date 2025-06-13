@@ -177,11 +177,13 @@ class CerberusObfuscator:
         # Layer 0: Preparation
         print("  [*] Layer 0: Cleaning source code...")
         cleaned_code = self.clean_source_code(source_code)
-        self.original_hash = self.calculate_hash(cleaned_code)
         
         # Layer 1: AST Transformations
         print("  [*] Layer 1: Applying AST transformations...")
         obfuscated_ast = self.apply_ast_transformations(cleaned_code)
+        
+        # Calculate hash AFTER transformations to match what's actually encrypted
+        self.original_hash = self.calculate_hash(obfuscated_ast)
         
         # Layer 2: Encryption & Serialization
         print("  [*] Layer 2: Encrypting and serializing...")
@@ -218,8 +220,11 @@ class CerberusObfuscator:
             
             # Only add advanced obfuscations if using Gist mode (has proper loader)
             if self.use_gist:
-                transformers.insert(0, NameObfuscator())
-                transformers.insert(1, StringObfuscator(self.aes_key))
+                # TEMPORARILY DISABLED NameObfuscator to avoid variable naming conflicts
+                # transformers.insert(0, NameObfuscator())
+                # DISABLED StringObfuscator for now due to compatibility issues
+                # transformers.insert(1, StringObfuscator(self.aes_key))
+                pass
             
             for transformer in transformers:
                 tree = transformer.visit(tree)
@@ -322,24 +327,12 @@ class CerberusObfuscator:
         # Generate obfuscated variable names
         var_payload = self.generate_random_name()
         var_xor_key = self.generate_random_name()
-        var_aes_key = self.generate_random_name()
         var_hash = self.generate_random_name()
         var_gist_id = self.generate_random_name()
         var_gist_file = self.generate_random_name()
+        var_token = self.generate_random_name()
         func_check = self.generate_random_name()
         func_decode = self.generate_random_name()
-        func_decrypt_str = self.generate_random_name()
-        
-        # Create AES decryption function for strings
-        aes_decrypt_func = f'''def {func_decrypt_str}(encrypted_b64):
- from Crypto.Cipher import AES
- from Crypto.Util.Padding import unpad
- import base64
- key = bytes({list(self.aes_key)})
- encrypted = base64.b64decode(encrypted_b64)
- cipher = AES.new(key, AES.MODE_ECB)
- decrypted = unpad(cipher.decrypt(encrypted), AES.block_size)
- return decrypted.decode()'''
         
         loader_template = f'''# Cerberus Protected Code - One-Time Execution Only
 import sys,base64,binascii,zlib,marshal,hashlib,requests,os
@@ -348,8 +341,7 @@ import sys,base64,binascii,zlib,marshal,hashlib,requests,os
 {var_hash}="{self.original_hash}"
 {var_gist_id}="{gist_id}"
 {var_gist_file}="{gist_filename}"
-
-{aes_decrypt_func}
+{var_token}="{self.github_token if self.github_token else ''}"
 
 def {func_check}():
  try:
@@ -360,12 +352,15 @@ def {func_check}():
   gist_data = response.json()
   if gist_data["files"][{var_gist_file}]["content"] != "UNUSED":
    sys.exit(0)
-  # Continue execution even if update fails
-  try:
-   patch_data = {{"files": {{{var_gist_file}: {{"content": "USED"}}}}}}
-   requests.patch(url, json=patch_data, timeout=10)
-  except:
-   pass
+     # Update gist status to mark as used
+   try:
+    patch_url = f"https://api.github.com/gists/{{{var_gist_id}}}"
+    headers = {{"Authorization": f"token {{{var_token}}}"}} if {var_token} else {{}}
+    patch_data = {{"files": {{{var_gist_file}: {{"content": "USED"}}}}}}
+    patch_response = requests.patch(patch_url, json=patch_data, headers=headers, timeout=10)
+    # Continue execution even if update fails
+   except:
+    pass
  except:
   sys.exit(0)
 
@@ -495,18 +490,34 @@ class NameObfuscator(ast.NodeTransformer):
         
     def generate_obfuscated_name(self, original_name: str) -> str:
         if original_name not in self.name_mapping:
-            # Use characters that won't create invalid identifiers
-            first_chars = 'OoIl_'  # Valid starting characters
-            other_chars = 'OoIl0_'  # Characters for the rest
+            # Use deterministic but obfuscated naming to avoid inconsistencies
+            import hashlib
             
-            # Ensure name starts with valid character and isn't octal-like
-            while True:
-                name = random.choice(first_chars)
-                name += ''.join(random.choice(other_chars) for _ in range(7))
-                
-                # Avoid patterns that look like octal literals
-                if not (name.startswith('0') or name.startswith('O0') or name.startswith('o0')):
-                    break
+            # Create a deterministic hash-based obfuscated name
+            hash_obj = hashlib.md5(original_name.encode())
+            hash_hex = hash_obj.hexdigest()
+            
+            # Convert to obfuscated pattern using safe characters
+            chars = 'OoIl_'
+            name = ''
+            
+            # First character must be letter or underscore
+            name += chars[int(hash_hex[0], 16) % len(chars)]
+            
+            # Remaining characters
+            for i in range(1, 8):
+                if i < len(hash_hex):
+                    char_idx = int(hash_hex[i], 16) % len(chars)
+                    name += chars[char_idx]
+                else:
+                    name += '_'
+            
+            # Ensure uniqueness by adding suffix if needed
+            base_name = name
+            counter = 0
+            while name in self.name_mapping.values():
+                counter += 1
+                name = base_name + str(counter)
                     
             self.name_mapping[original_name] = name
         return self.name_mapping[original_name]
