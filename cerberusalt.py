@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 CerberusAlt - Advanced Multi-Layer Python Obfuscator (Alternative Implementation)
-Author: Advanced Cyber Security Team
+Author: gvoze32
 Version: 2.0
 
 Enhanced Features:

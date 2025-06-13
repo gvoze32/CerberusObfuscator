@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Cerberus Obfuscator - Advanced Multi-Layer Python Code Obfuscator
-Author: Cyber Security Specialist
+Author: gvoze32
 Version: 1.0
 
 Dependencies:
