@@ -21,12 +21,15 @@ import argparse
 import base64
 import binascii
 import hashlib
+import json
 import marshal
 import os
 import random
 import string
 import sys
+import time
 import zlib
+from datetime import datetime
 from typing import Dict, List, Set, Any, Optional
 
 # Optional import for GitHub functionality
@@ -138,18 +141,32 @@ class CerberusObfuscator:
         return hashlib.sha256(code.encode()).hexdigest()
     
     def create_github_gist(self) -> tuple:
-        """Create GitHub Gist for one-time execution tracking"""
+        """Create GitHub Gist for one-time execution tracking using JSON format"""
         if not self.use_gist:
             return None, None
             
-        self.gist_filename = f"{''.join(random.choices(string.ascii_letters + string.digits, k=12))}.txt"
+        self.gist_filename = f"status_{''.join(random.choices(string.ascii_letters + string.digits, k=12))}.json"
+        
+        # Create JSON data structure like cerberusbin
+        
+        status_data = {
+            "timestamp": int(time.time()),
+            "status": "UNUSED",
+            "checksum": hashlib.md5(os.urandom(32)).hexdigest(),
+            "version": "1.0.1",
+            "metadata": {
+                "created": datetime.now().isoformat(),
+                "expires": (datetime.now().timestamp() + 86400),  # 24 hours
+                "client": "cerberus"
+            }
+        }
         
         gist_data = {
-            "description": "Status tracking",
-            "public": True,
+            "description": f"Configuration data - {random.randint(1000, 9999)}",
+            "public": False,  # Private gist for better security like cerberusbin
             "files": {
                 self.gist_filename: {
-                    "content": "UNUSED"
+                    "content": json.dumps(status_data, indent=2)
                 }
             }
         }
@@ -335,7 +352,7 @@ class CerberusObfuscator:
         func_decode = self.generate_random_name()
         
         loader_template = f'''# Cerberus Protected Code - One-Time Execution Only
-import sys,base64,binascii,zlib,marshal,hashlib,requests,os
+import sys,base64,binascii,zlib,marshal,hashlib,requests,os,json,time
 {var_payload}="{payload}"
 {var_xor_key}={list(self.xor_key)}
 {var_hash}="{self.original_hash}"
@@ -345,24 +362,36 @@ import sys,base64,binascii,zlib,marshal,hashlib,requests,os
 
 def {func_check}():
  try:
+  headers = {{'Authorization': f'token {{{var_token}}}', 'User-Agent': 'Cerberus/1.0'}} if {var_token} else {{'User-Agent': 'Cerberus/1.0'}}
   url = f"https://api.github.com/gists/{{{var_gist_id}}}"
-  response = requests.get(url, timeout=10)
-  if response.status_code != 200:
-   sys.exit(0)
-  gist_data = response.json()
-  if gist_data["files"][{var_gist_file}]["content"] != "UNUSED":
-   sys.exit(0)
-     # Update gist status to mark as used
-   try:
-    patch_url = f"https://api.github.com/gists/{{{var_gist_id}}}"
-    headers = {{"Authorization": f"token {{{var_token}}}"}} if {var_token} else {{}}
-    patch_data = {{"files": {{{var_gist_file}: {{"content": "USED"}}}}}}
-    patch_response = requests.patch(patch_url, json=patch_data, headers=headers, timeout=10)
-    # Continue execution even if update fails
-   except:
-    pass
- except:
-  sys.exit(0)
+  
+  # Multiple requests to detect monitoring like cerberusbin
+  for i in range(3):
+   resp = requests.get(url, headers=headers, timeout=15)
+   if resp.status_code != 200:
+    os._exit(0)
+   time.sleep(0.1)
+  
+  gist_data = resp.json()
+  content = json.loads(gist_data["files"][{var_gist_file}]["content"])
+  
+  # Check expiration like cerberusbin
+  if time.time() > content.get("metadata", {{}}).get("expires", 0):
+   os._exit(0)
+  
+  if content["status"] != "UNUSED":
+   os._exit(0)
+  
+  # Mark as used with timestamp like cerberusbin
+  content["status"] = "USED"
+  content["used_at"] = time.time()
+  content["client_info"] = os.uname().sysname if hasattr(os, 'uname') else 'unknown'
+  
+  patch_data = {{"files": {{{var_gist_file}: {{"content": json.dumps(content)}}}}}}
+  requests.patch(url, headers=headers, json=patch_data, timeout=15)
+  
+ except Exception as e:
+  os._exit(0)
 
 def {func_decode}():
  try:
