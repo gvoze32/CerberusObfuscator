@@ -45,8 +45,19 @@ class CerberusObfuscator:
         
     def generate_random_name(self, length: int = 8) -> str:
         """Generate obfuscated variable names"""
-        chars = 'Oo0'
-        return ''.join(random.choice(chars) for _ in range(length))
+        first_chars = 'OoIl_'  # Valid starting characters
+        other_chars = 'OoIl0_'  # Characters for the rest
+        
+        # Ensure name starts with valid character and isn't octal-like
+        while True:
+            name = random.choice(first_chars)
+            name += ''.join(random.choice(other_chars) for _ in range(length - 1))
+            
+            # Avoid patterns that look like octal literals
+            if not (name.startswith('0') or name.startswith('O0') or name.startswith('o0')):
+                break
+                
+        return name
     
     def clean_source_code(self, source: str) -> str:
         """Layer 0: Remove comments and docstrings"""
@@ -55,23 +66,55 @@ class CerberusObfuscator:
             cleaner = SourceCleaner()
             cleaned_tree = cleaner.visit(tree)
             return ast.unparse(cleaned_tree)
-        except:
-            # Fallback: simple regex cleaning
+        except Exception as e:
+            # Fallback: improved regex cleaning with indentation handling
+            print(f"[*] AST cleaning failed ({e}), using regex fallback...")
             lines = source.split('\n')
             cleaned_lines = []
             in_multiline_string = False
+            in_docstring = False
             
-            for line in lines:
+            for i, line in enumerate(lines):
                 stripped = line.strip()
+                
+                # Skip empty lines and comments
                 if not stripped or stripped.startswith('#'):
                     continue
+                
+                # Handle multiline strings/docstrings
                 if '"""' in line or "'''" in line:
-                    in_multiline_string = not in_multiline_string
+                    # Count quotes to handle multiple on same line
+                    quote_count = line.count('"""') + line.count("'''")
+                    if quote_count % 2 == 1:  # Odd number means start/end of string
+                        if not in_multiline_string:
+                            in_multiline_string = True
+                            # Skip docstrings at start of functions/classes
+                            if i > 0 and any(keyword in lines[i-1] for keyword in ['def ', 'class ']):
+                                in_docstring = True
+                            continue
+                        else:
+                            in_multiline_string = False
+                            in_docstring = False
+                            continue
+                
+                # Skip content inside multiline strings
+                if in_multiline_string:
                     continue
-                if not in_multiline_string:
-                    cleaned_lines.append(line)
+                
+                # Keep the line with proper indentation
+                cleaned_lines.append(line)
                     
-            return '\n'.join(cleaned_lines)
+            # Ensure proper indentation consistency
+            result = '\n'.join(cleaned_lines)
+            
+            # Validate the result
+            try:
+                ast.parse(result)
+                return result
+            except SyntaxError:
+                # If still fails, return original code
+                print("[*] Regex cleaning also failed, returning original code...")
+                return source
     
     def calculate_hash(self, code: str) -> str:
         """Calculate SHA-256 hash for anti-tampering"""
@@ -135,21 +178,90 @@ class CerberusObfuscator:
     
     def apply_ast_transformations(self, source_code: str) -> str:
         """Layer 1: Apply all AST transformations"""
-        tree = ast.parse(source_code)
+        try:
+            tree = ast.parse(source_code)
+            
+            # Apply transformations in sequence (safer set)
+            transformers = [
+                NameObfuscator(),
+                StringObfuscator(self.aes_key),
+                IntegerObfuscator()
+                # Note: ControlFlowFlattener and DeadCodeInjector temporarily disabled
+                # due to potential indentation issues with complex AST structures
+            ]
+            
+            for transformer in transformers:
+                tree = transformer.visit(tree)
+            
+            # Generate code with proper indentation
+            unparsed_code = ast.unparse(tree)
+            
+            # Fix any indentation issues
+            return self.fix_indentation(unparsed_code)
+            
+        except IndentationError as e:
+            print(f"[-] Error: {e}")
+            print("[-] Trying fallback method...")
+            return self.fallback_obfuscation(source_code)
+        except Exception as e:
+            print(f"[-] Error: {e}")
+            print("[-] Trying fallback method...")
+            return self.fallback_obfuscation(source_code)
+    
+    def fix_indentation(self, code: str) -> str:
+        """Fix indentation issues in generated code"""
+        import textwrap
+        lines = code.split('\n')
         
-        # Apply transformations in sequence
-        transformers = [
-            NameObfuscator(),
-            StringObfuscator(self.aes_key),
-            IntegerObfuscator(),
-            ControlFlowFlattener(),
-            DeadCodeInjector()
-        ]
+        # Remove leading/trailing empty lines
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
         
-        for transformer in transformers:
-            tree = transformer.visit(tree)
+        if not lines:
+            return code
+            
+        # Find minimum indentation (excluding empty lines)
+        min_indent = float('inf')
+        for line in lines:
+            if line.strip():  # Skip empty lines
+                indent = len(line) - len(line.lstrip())
+                min_indent = min(min_indent, indent)
         
-        return ast.unparse(tree)
+        if min_indent == float('inf'):
+            min_indent = 0
+            
+        # Remove common leading whitespace
+        fixed_lines = []
+        for line in lines:
+            if line.strip():
+                fixed_lines.append(line[min_indent:] if len(line) > min_indent else line)
+            else:
+                fixed_lines.append('')
+        
+        return '\n'.join(fixed_lines)
+    
+    def fallback_obfuscation(self, source_code: str) -> str:
+        """Fallback obfuscation method with simpler transformations"""
+        try:
+            tree = ast.parse(source_code)
+            
+            # Apply only the safest transformations
+            safe_transformers = [
+                NameObfuscator()
+                # StringObfuscator disabled in fallback for maximum compatibility
+            ]
+            
+            for transformer in safe_transformers:
+                tree = transformer.visit(tree)
+            
+            return ast.unparse(tree)
+            
+        except Exception as e:
+            print(f"[-] Fallback also failed: {e}")
+            print("[-] Using original code with minimal obfuscation...")
+            return source_code
     
     def encrypt_and_serialize(self, code: str) -> bytes:
         """Layer 2: XOR encryption and marshal serialization"""
@@ -243,7 +355,7 @@ exec({func_decode}())'''
         return loader_template
 
 
-class SourceCleaner(ast.NodeVisitor):
+class SourceCleaner(ast.NodeTransformer):
     """Remove docstrings and comments from AST"""
     def visit_FunctionDef(self, node):
         if (node.body and isinstance(node.body[0], ast.Expr) and 
@@ -271,8 +383,20 @@ class NameObfuscator(ast.NodeTransformer):
         
     def generate_obfuscated_name(self, original_name: str) -> str:
         if original_name not in self.name_mapping:
-            chars = 'Oo0'
-            self.name_mapping[original_name] = ''.join(random.choice(chars) for _ in range(8))
+            # Use characters that won't create invalid identifiers
+            first_chars = 'OoIl_'  # Valid starting characters
+            other_chars = 'OoIl0_'  # Characters for the rest
+            
+            # Ensure name starts with valid character and isn't octal-like
+            while True:
+                name = random.choice(first_chars)
+                name += ''.join(random.choice(other_chars) for _ in range(7))
+                
+                # Avoid patterns that look like octal literals
+                if not (name.startswith('0') or name.startswith('O0') or name.startswith('o0')):
+                    break
+                    
+            self.name_mapping[original_name] = name
         return self.name_mapping[original_name]
     
     def should_obfuscate(self, name: str) -> bool:
@@ -308,6 +432,7 @@ class StringObfuscator(ast.NodeTransformer):
     def __init__(self, aes_key: bytes):
         self.aes_key = aes_key
         self.encrypted_strings = {}
+        self.in_fstring = False  # Track if we're inside an f-string
         
     def encrypt_string(self, text: str) -> str:
         if text in self.encrypted_strings:
@@ -322,7 +447,15 @@ class StringObfuscator(ast.NodeTransformer):
         return encoded
     
     def visit_Constant(self, node):
+        # Skip string encryption if we're inside an f-string
+        if self.in_fstring:
+            return node
+            
         if isinstance(node.value, str) and len(node.value) > 1:
+            # Don't encrypt very short strings or strings that might be format specifiers
+            if len(node.value.strip()) <= 1:
+                return node
+                
             encrypted = self.encrypt_string(node.value)
             # Replace with decryption call - will be handled in loader
             return ast.Call(
@@ -331,6 +464,15 @@ class StringObfuscator(ast.NodeTransformer):
                 keywords=[]
             )
         return node
+    
+    def visit_JoinedStr(self, node):
+        # Mark that we're entering an f-string and skip processing its content
+        # F-strings have complex internal structure that shouldn't be modified
+        old_in_fstring = self.in_fstring
+        self.in_fstring = True
+        result = self.generic_visit(node)
+        self.in_fstring = old_in_fstring
+        return result
 
 
 class IntegerObfuscator(ast.NodeTransformer):

@@ -241,24 +241,94 @@ threading.Thread(target={self.generate_obfuscated_name()}, daemon=True).start()
     
     def apply_enhanced_ast_transformations(self, source_code: str) -> str:
         """Apply enhanced AST transformations with more sophisticated techniques"""
-        tree = ast.parse(source_code)
+        try:
+            tree = ast.parse(source_code)
+            
+            # Apply transformations in safer sequence (complex transformers disabled for stability)
+            transformers = [
+                EnhancedNameObfuscator(),
+                AdvancedStringObfuscator(self.aes_key, self.aes_iv),
+                EnhancedIntegerObfuscator()
+                # Note: Complex transformers temporarily disabled for stability:
+                # AdvancedControlFlowFlattener, SophisticatedJunkCodeInjector, 
+                # CallObfuscator, LoopObfuscator
+            ]
+            
+            for transformer in transformers:
+                tree = transformer.visit(tree)
+                ast.fix_missing_locations(tree)  # Fix AST locations
+            
+            # Generate code with proper indentation
+            unparsed_code = ast.unparse(tree)
+            
+            # Fix any indentation issues
+            return self.fix_indentation(unparsed_code)
+            
+        except IndentationError as e:
+            print(f"[-] Error: {e}")
+            print("[-] Trying fallback method...")
+            return self.fallback_enhanced_obfuscation(source_code)
+        except Exception as e:
+            print(f"[-] Error: {e}")
+            print("[-] Trying fallback method...")
+            return self.fallback_enhanced_obfuscation(source_code)
+    
+    def fix_indentation(self, code: str) -> str:
+        """Fix indentation issues in generated code"""
+        lines = code.split('\n')
         
-        # Apply transformations in optimized sequence
-        transformers = [
-            EnhancedNameObfuscator(),
-            AdvancedStringObfuscator(self.aes_key, self.aes_iv),
-            EnhancedIntegerObfuscator(),
-            AdvancedControlFlowFlattener(),
-            SophisticatedJunkCodeInjector(),
-            CallObfuscator(),  # New: Obfuscate function calls
-            LoopObfuscator()   # New: Obfuscate loops
-        ]
+        # Remove leading/trailing empty lines
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
         
-        for transformer in transformers:
-            tree = transformer.visit(tree)
-            ast.fix_missing_locations(tree)  # Fix AST locations
+        if not lines:
+            return code
+            
+        # Find minimum indentation (excluding empty lines)
+        min_indent = float('inf')
+        for line in lines:
+            if line.strip():  # Skip empty lines
+                indent = len(line) - len(line.lstrip())
+                min_indent = min(min_indent, indent)
         
-        return ast.unparse(tree)
+        if min_indent == float('inf'):
+            min_indent = 0
+            
+        # Remove common leading whitespace and ensure consistent indentation
+        fixed_lines = []
+        for line in lines:
+            if line.strip():
+                # Convert tabs to spaces for consistency
+                line = line.expandtabs(4)
+                fixed_lines.append(line[min_indent:] if len(line) > min_indent else line)
+            else:
+                fixed_lines.append('')
+        
+        return '\n'.join(fixed_lines)
+    
+    def fallback_enhanced_obfuscation(self, source_code: str) -> str:
+        """Fallback enhanced obfuscation method with safer transformations"""
+        try:
+            tree = ast.parse(source_code)
+            
+            # Apply only the safest transformations
+            safe_transformers = [
+                EnhancedNameObfuscator(),
+                AdvancedStringObfuscator(self.aes_key, self.aes_iv)
+            ]
+            
+            for transformer in safe_transformers:
+                tree = transformer.visit(tree)
+                ast.fix_missing_locations(tree)
+            
+            return ast.unparse(tree)
+            
+        except Exception as e:
+            print(f"[-] Enhanced fallback also failed: {e}")
+            print("[-] Using original code with minimal obfuscation...")
+            return source_code
     
     def enhanced_encrypt_and_serialize(self, code: str) -> bytes:
         """Enhanced encryption using AES-256-CBC + XOR + Custom encoding"""
@@ -560,9 +630,18 @@ class EnhancedNameObfuscator(ast.NodeTransformer):
         
     def generate_confusing_name(self, original_name: str) -> str:
         if original_name not in self.name_mapping:
-            # Use more confusing character combinations
-            confusing_chars = ['O', 'o', '0', 'I', 'l', '1', '_']
-            base_name = ''.join(random.choices(confusing_chars, k=random.randint(8, 16)))
+            # Use safer character combinations to avoid invalid identifiers
+            first_chars = 'OoIl_'  # Valid starting characters
+            other_chars = 'OoIl1_'  # Characters for the rest (removed '0' to avoid octal issues)
+            
+            # Ensure name starts with valid character and isn't octal-like
+            while True:
+                base_name = random.choice(first_chars)
+                base_name += ''.join(random.choice(other_chars) for _ in range(random.randint(8, 16)))
+                
+                # Avoid patterns that look like octal literals or invalid identifiers
+                if not (base_name.startswith('0') or base_name.startswith('O0') or base_name.startswith('o0')):
+                    break
             
             # Add some pattern to make it even more confusing
             patterns = ['__', '_', '']
@@ -608,6 +687,7 @@ class AdvancedStringObfuscator(ast.NodeTransformer):
         self.aes_key = aes_key
         self.iv = iv
         self.encrypted_strings = {}
+        self.in_fstring = False  # Track if we're inside an f-string
         
     def encrypt_string_advanced(self, text: str) -> str:
         if text in self.encrypted_strings:
@@ -623,6 +703,10 @@ class AdvancedStringObfuscator(ast.NodeTransformer):
         return encoded
     
     def visit_Constant(self, node):
+        # Skip string encryption if we're inside an f-string
+        if self.in_fstring:
+            return node
+            
         if isinstance(node.value, str) and len(node.value) > 1:
             # Skip very short strings and special values
             if node.value in ['\n', '\t', ' ', '', '__main__']:
@@ -640,6 +724,15 @@ class AdvancedStringObfuscator(ast.NodeTransformer):
                 keywords=[]
             )
         return node
+    
+    def visit_JoinedStr(self, node):
+        # Mark that we're entering an f-string and skip processing its content
+        # F-strings have complex internal structure that shouldn't be modified
+        old_in_fstring = self.in_fstring
+        self.in_fstring = True
+        result = self.generic_visit(node)
+        self.in_fstring = old_in_fstring
+        return result
 
 
 class EnhancedIntegerObfuscator(ast.NodeTransformer):
@@ -863,7 +956,7 @@ class SophisticatedJunkCodeInjector(ast.NodeTransformer):
                         args=[ast.Constant(value="dummy")],
                         keywords=[]
                     ),
-                    ops=[ast.Mod()],
+                    ops=[ast.Mod],
                     comparators=[ast.Constant(value=2)]
                 ),
                 body=[
