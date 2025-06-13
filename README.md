@@ -1,24 +1,18 @@
-# Cerberus Obfuscator Suite
+# Cerberus Obfuscator
 
-**Advanced Multi-Layer Python Code Obfuscator with Dual Implementation**
+**Advanced Multi-Layer Python Code Obfuscator with Binary Compilation Support**
 
-The Cerberus Obfuscator Suite is an advanced Python obfuscation toolkit that implements multi-layer architecture to protect Python code from reverse engineering and analysis. Named after the three-headed guardian dog from Greek mythology, this tool uses various layered security techniques to make code extremely difficult to analyze.
+The Cerberus Obfuscator is an advanced Python obfuscation toolkit that implements multi-layer architecture to protect Python code from reverse engineering and analysis. Named after the three-headed guardian dog from Greek mythology, this tool uses various layered security techniques to make code extremely difficult to analyze.
 
-## Available Tools
+## Key Features
 
-This project includes two powerful obfuscators:
-
-### Cerberus Original
-- Primary Focus: Python Obfuscation
-- Output Format: Python Files Only
-- Reliable and proven architecture
-- Simple setup and configuration
-
-### CerberusBin
-- Primary Focus: Binary Compilation
-- Output Format: Python + Binary Options
-- Built-in Nuitka Support for binary compilation
-- Enhanced security features
+🔐 **Multi-Layer Protection Architecture** - 5-layer obfuscation system  
+🔧 **Binary Compilation Support** - Built-in Nuitka integration  
+🛡️ **Advanced Anti-Debug Mechanisms** - Process monitoring and detection  
+🌐 **GitHub Gist Integration** - One-time execution enforcement  
+⚡ **Standalone Mode** - Offline execution capability  
+🔒 **Enhanced Encryption** - AES-256-CBC + PBKDF2 key derivation  
+🎯 **Smart RAM Detection** - Automatic compilation optimization  
 
 ## Installation
 
@@ -28,65 +22,59 @@ This project includes two powerful obfuscators:
 # Install pip dependencies
 pip install -r requirements.txt
 
-# Optional: For binary compilation (CerberusBin only)
+# Optional: For binary compilation
 pip install nuitka
 ```
 
 ### Dependencies
 - `requests>=2.28.0` - For GitHub Gist API
 - `pycryptodome>=3.17.0` - For AES encryption
-- `nuitka` (optional) - For binary compilation in CerberusBin
+- `nuitka` (optional) - For binary compilation
+- `psutil` (optional) - For RAM detection and anti-debug features
 
 ## Usage
 
-### Cerberus Original
-
-#### Basic Usage
+### Command Line Interface
 ```bash
+# Basic obfuscation (standalone mode):
+python cerberus.py -i input_file.py -o output_file.py
+
 # With GitHub Gist (one-time execution):
 python cerberus.py -i input_file.py -o output_file.py --token YOUR_GITHUB_TOKEN
 
-# Standalone mode (no internet required):
-python cerberus.py -i input_file.py -o output_file.py
-```
-
-### CerberusBin
-
-#### Basic Usage
-```bash
-# With GitHub Gist (one-time execution):
-python cerberusbin.py -i input_file.py -o output_file.py --token YOUR_GITHUB_TOKEN
-
-# Standalone mode (no internet required):
-python cerberusbin.py -i input_file.py -o output_file.py
-
-# Binary compilation (main feature):
-python cerberusbin.py -i input_file.py -o output_file --binary
+# Binary compilation:
+python cerberus.py -i input_file.py -o output_file --binary
 
 # Disable anti-debug (for testing):
-python cerberusbin.py -i input_file.py -o output_file.py --no-debug-checks
+python cerberus.py -i input_file.py -o output_file.py --no-debug-checks
 ```
 
 ### Command Line Parameters
-- `-i, --input`: Python file to obfuscate
-- `-o, --output`: Output file for obfuscated code
+- `-i, --input`: Python file to obfuscate (required)
+- `-o, --output`: Output file for obfuscated code (required)
 - `--token`: GitHub Personal Access Token (optional, enables one-time execution via Gist)
-- `--binary`: (CerberusBin only) Compile to binary using Nuitka
-- `--no-debug-checks`: (CerberusBin only) Disable anti-debug mechanisms
+- `--binary`: Compile to binary using Nuitka (optional)
+- `--no-debug-checks`: Disable anti-debug mechanisms (optional)
 
 ### Execution Modes
 
 #### GitHub Gist Mode (with --token)
-- One-time execution: File can only be run once
-- Internet required: Must have connectivity for Gist validation
-- Maximum security: External validation system
-- Dependencies: `requests` + `pycryptodome`
+- **One-time execution**: File can only be run once
+- **Internet required**: Must have connectivity for Gist validation
+- **Maximum security**: External validation system
+- **Dependencies**: `requests` + `pycryptodome`
 
 #### Standalone Mode (without --token)
-- Multiple executions: File can be run multiple times
-- No internet required: Works completely offline
-- Local protection: Self-contained anti-tampering
-- Dependencies: `pycryptodome` only
+- **Multiple executions**: File can be run multiple times
+- **No internet required**: Works completely offline
+- **Local protection**: Self-contained anti-tampering
+- **Dependencies**: `pycryptodome` only
+
+#### Binary Mode (with --binary)
+- **Native executable**: No Python interpreter required on target
+- **No dependencies**: Self-contained binary
+- **Enhanced protection**: Additional compilation-level obfuscation
+- **Cross-platform**: Supports Windows, Linux, macOS
 
 ### GitHub Token Setup
 1. Go to GitHub Settings → Developer settings → Personal access tokens
@@ -110,189 +98,206 @@ if __name__ == "__main__":
     total = calculate_sum(x, y)
 ```
 
-### Using Cerberus Original
-
-#### With GitHub Gist (One-time execution)
+### Basic Obfuscation (Standalone Mode)
 ```bash
-python cerberus.py -i example.py -o example_protected.py --token ghp_xxxxxxxxxxxx
+python cerberus.py -i example.py -o example_protected.py
 ```
 
 **Output:**
 ```
-[+] Starting Cerberus Obfuscation Process (with GitHub Gist)...
-  [*] Layer 0: Cleaning source code...
-  [*] Layer 1: Applying AST transformations...
-  [*] Layer 2: Encrypting and serializing...
-  [*] Layer 3: Compressing and encoding...
-  [*] Layer 4: Creating GitHub Gist and loader stub...
-[+] Obfuscation complete!
+[+] Starting Cerberus Obfuscation (standalone mode)...
+  [*] Layer 0: Enhanced source cleaning and preparation...
+  [*] Layer 1: Advanced AST transformations...
+  [*] Layer 2: AES-256-CBC encryption and serialization...
+  [*] Layer 3: Advanced compression and multi-layer encoding...
+  [*] Layer 4: Creating enhanced standalone loader...
+[+] Cerberus obfuscation complete!
 [+] Successfully obfuscated example.py -> example_protected.py
-[+] GitHub Gist ID: a1b2c3d4e5f6g7h8i9j0
-[!] WARNING: The obfuscated file can only be executed ONCE!
-```
-
-#### Standalone Mode (Multiple executions)
-```bash
-python cerberus.py -i example.py -o example_standalone.py
-```
-
-**Output:**
-```
-[+] Starting Cerberus Obfuscation Process (standalone mode)...
-  [*] Layer 0: Cleaning source code...
-  [*] Layer 1: Applying AST transformations...
-  [*] Layer 2: Encrypting and serializing...
-  [*] Layer 3: Compressing and encoding...
-  [*] Layer 4: Creating standalone loader stub...
-[+] Obfuscation complete!
-[+] Successfully obfuscated example.py -> example_standalone.py
 [+] Standalone mode: No GitHub Gist created
 [!] The obfuscated file can be executed multiple times
-[!] Required dependency on target system: pycryptodome
+[!] Cerberus security features (standalone):
+    - XOR encryption (reliable)
+    - Base64→Hex encoding (stable)
+    - Import preservation (compatible)
+    - Anti-debug mechanisms
+[!] Required dependency on target system:
+    - pycryptodome
 ```
 
-### Using CerberusBin
-
-#### With GitHub Gist (One-time execution)
+### With GitHub Gist (One-time execution)
 ```bash
-python cerberusbin.py -i example.py -o example_advanced.py --token ghp_xxxxxxxxxxxx
+python cerberus.py -i example.py -o example_gist.py --token ghp_xxxxxxxxxxxx
 ```
 
 **Output:**
 ```
-[+] Starting CerberusBin Obfuscation (with GitHub Gist)...
+[+] Starting Cerberus Obfuscation (with GitHub Gist)...
   [*] Layer 0: Enhanced source cleaning and preparation...
-  [*] Layer 1: Reliable AST transformations...
-  [*] Layer 2: Unified encryption and serialization...
-  [*] Layer 3: Reliable compression and encoding...
-  [*] Layer 4: Creating unified loader with GitHub Gist...
-[+] CerberusBin obfuscation complete!
-[+] Successfully obfuscated example.py -> example_advanced.py
+  [*] Layer 1: Advanced AST transformations...
+  [*] Layer 2: AES-256-CBC encryption and serialization...
+  [*] Layer 3: Advanced compression and multi-layer encoding...
+  [*] Layer 4: Creating enhanced loader with GitHub Gist...
+[+] Cerberus obfuscation complete!
+[+] Successfully obfuscated example.py -> example_gist.py
 [+] GitHub Gist ID: x9y8z7w6v5u4t3s2r1q0
+[+] Status file: status_AbCdEfGhIjKlMnOp.json
 [!] WARNING: The obfuscated file can only be executed ONCE!
+[!] Cerberus security features:
+    - XOR encryption (reliable)
+    - Base64→Hex encoding (stable)
+    - Anti-debug mechanisms (when enabled)
+    - Import preservation (compatible)
 ```
 
-#### Standalone Mode (Multiple executions)
+### Binary Compilation
 ```bash
-python cerberusbin.py -i example.py -o example_standalone_advanced.py
+python cerberus.py -i example.py -o example_binary --binary
 ```
 
 **Output:**
 ```
-[+] Starting CerberusBin Obfuscation (standalone mode)...
+[+] Starting Cerberus Obfuscation (standalone mode)...
   [*] Layer 0: Enhanced source cleaning and preparation...
-  [*] Layer 1: Reliable AST transformations...
-  [*] Layer 2: Unified encryption and serialization...
-  [*] Layer 3: Reliable compression and encoding...
-  [*] Layer 4: Creating unified standalone loader...
-[+] CerberusBin obfuscation complete!
-[+] Successfully obfuscated example.py -> example_standalone_advanced.py
-[+] Standalone mode: No GitHub Gist created
-[!] The obfuscated file can be executed multiple times
-```
-
-#### Binary Compilation
-```bash
-python cerberusbin.py -i example.py -o example_binary --binary
-```
-
-**Output:**
-```
-[+] Starting CerberusBin Obfuscation with Binary Compilation...
-  [*] Layer 0: Enhanced source cleaning and preparation...
-  [*] Layer 1: Reliable AST transformations...
-  [*] Layer 2: Unified encryption and serialization...
-  [*] Layer 3: Reliable compression and encoding...
-  [*] Layer 4: Creating unified standalone loader...
+  [*] Layer 1: Advanced AST transformations...
+  [*] Layer 2: AES-256-CBC encryption and serialization...
+  [*] Layer 3: Advanced compression and multi-layer encoding...
+  [*] Layer 4: Creating enhanced standalone loader...
   [*] Layer 5: Compiling to binary with Nuitka...
-[+] Binary compilation complete!
-[+] Successfully created: example_binary.exe
-[!] Binary can be executed multiple times
-[!] No dependencies required on target system
+  [*] System RAM: 16.0GB
+  [*] Sufficient RAM available, using standard compilation
+  [+] Found Nuitka: nuitka3
+  [*] Compiling with Nuitka (nuitka3) using standard settings...
+  [+] Binary compiled successfully: example_binary
+[+] Cerberus obfuscation complete!
+Binary compiled: example_binary
 ```
 
 ## Core Features
 
 ### Multi-Layer Protection Architecture
 
-**Layer 0: Initialization & Preparation**
-- Source code cleaning (remove comments and docstrings)
-- Anti-tampering mechanisms with hash verification
-- Code integrity validation before execution
+**Layer 0: Enhanced Preparation**
+- Advanced source code cleaning with AST manipulation
+- Enhanced anti-tampering mechanisms
+- Self-tamper detection with integrity validation
 
-**Layer 1: AST Transformations**
-- Name Obfuscation: Replace variable, function, and class names
-- String Encryption: Encrypt all string literals
-- Integer Obfuscation: Replace integer constants with expressions
-- Control Flow Flattening: Transform program flow into state machines
-- Dead Code Injection: Inject fake code and opaque predicates
+**Layer 1: Advanced AST Transformations**
+- Enhanced name obfuscation with confusing patterns
+- Advanced string encryption using AES-256-CBC
+- Sophisticated integer obfuscation
+- Enhanced control flow flattening with state machines
+- More sophisticated junk code injection
 
-**Layer 2: Encryption & Serialization**
-- XOR encryption with random 256-bit keys
+**Layer 2: Enhanced Encryption & Serialization**
+- AES-256-CBC encryption (instead of ECB)
+- PBKDF2 key derivation with 100,000 iterations
+- XOR encryption with dynamic key generation
 - Marshal serialization for binary format
-- Reliable encryption pipeline
 
-**Layer 3: Compression & Encoding**
-- zlib compression to reduce size
-- Base64 to Hexadecimal encoding
-- Stable payload encoding
+**Layer 3: Advanced Compression & Encoding**
+- zlib compression with maximum level
+- Multi-layer Base64 → Hexadecimal encoding
+- Scrambled hex encoding for additional obfuscation
 
-**Layer 4: Protection & Distribution**
-- GitHub Gist integration for execution tracking (optional)
-- Self-destruct mechanism after single execution (Gist mode)
-- Standalone mode for offline execution
+**Layer 4: Enhanced Protection & Distribution**
+- GitHub Gist integration with JSON status tracking
+- Enhanced self-destruct mechanism
+- Private gist creation for better security
+- Standalone mode with local anti-tampering
 
-**Layer 5: Binary Compilation (CerberusBin only)**
-- Nuitka binary compilation support
-- Native executable generation
+**Layer 5: Binary Compilation (Optional)**
+- Nuitka binary compilation with automatic optimization
+- RAM detection for compilation settings
+- Cross-platform binary generation
 - No dependencies required on target system
 
 ## Security Features
 
-### Standard Protection (Both Tools)
-- Anti-tampering with hash verification
-- Silent exit on modification detection
-- Multi-layer encoding protection
-- Control flow obfuscation
-- Dead code injection
+### Enhanced Anti-Debug Mechanisms
+- **Process Monitoring**: Detects debugging tools (gdb, lldb, ida, ollydbg, x64dbg)
+- **Timing Analysis**: Detects debugger-induced slowdowns
+- **Memory Analysis**: Monitors unusual object counts
+- **Thread-Based Monitoring**: Background anti-debug checks
+- **Self-Tamper Detection**: File modification time validation
 
-### Enhanced Protection (CerberusBin)
-- Advanced anti-debug mechanisms
-- Thread-based monitoring
-- Process name detection
-- Memory protection features
-- Binary compilation support
+### Advanced Encryption
+- **AES-256-CBC**: Industry-standard encryption with proper IV
+- **PBKDF2 Key Derivation**: 100,000 iterations for key strengthening
+- **Dynamic Keys**: Generated based on GitHub token or random seed
+- **Multi-Layer Encoding**: Base64 → Hex → Scrambled patterns
 
 ### Network-Based Protection (Gist Mode)
-- Internet dependency for execution
-- GitHub Gist validation system
-- Fail-closed security model
-- One-time execution enforcement
+- **Private Gist Creation**: Enhanced security over public gists
+- **JSON Status Tracking**: Structured validation system
+- **Expiration Mechanism**: 24-hour automatic expiration
+- **Usage Tracking**: Client information logging
+- **Fail-Closed Security**: Silent exit on validation failure
+
+### Binary Compilation Features
+- **Smart RAM Detection**: Automatic optimization based on available memory
+- **Low-Memory Mode**: Optimized compilation for systems <8GB RAM
+- **Multi-Command Support**: Fallback to different Nuitka installations
+- **Error Handling**: Graceful fallback to Python code if compilation fails
+- **Cross-Platform**: Supports Windows (.exe), Linux, and macOS binaries
+
+## Advanced Configuration
+
+### RAM Optimization
+The tool automatically detects system RAM and optimizes Nuitka compilation:
+- **<8GB RAM**: Uses `--low-memory` flag for reduced memory consumption
+- **≥8GB RAM**: Uses standard compilation settings for faster build times
+
+### Anti-Debug Configuration
+Anti-debug features can be disabled for testing:
+```bash
+python cerberus.py -i input.py -o output.py --no-debug-checks
+```
 
 ## Important Notes
 
-1. **One-Time Execution**: Obfuscated files with Gist mode can only be executed ONCE
-2. **Internet Dependency**: Gist mode requires internet connection for execution
-3. **GitHub Token**: Token with gist scope required for Gist mode
-4. **Irreversible**: Obfuscation process cannot be reversed without original code
-5. **Legal Compliance**: Use only for legitimate purposes and educational research
+1. **Version 2.0**: This is an enhanced version with advanced features
+2. **One-Time Execution**: Gist mode files can only be executed ONCE
+3. **Internet Dependency**: Gist mode requires internet connection
+4. **GitHub Token**: Token with gist scope required for Gist mode
+5. **Binary Dependencies**: Nuitka required for binary compilation
+6. **Irreversible**: Obfuscation process cannot be reversed
+7. **Legal Compliance**: Use only for legitimate purposes
 
-## When to Use Each Tool
+## System Requirements
 
-### Use Cerberus Original for:
-- Simple obfuscation needs
-- Educational purposes
-- Quick prototyping
-- Lightweight protection
+### Minimum Requirements
+- Python 3.8+
+- 4GB RAM (8GB+ recommended for binary compilation)
+- Internet connection (for Gist mode only)
 
-### Use CerberusBin for:
-- Binary compilation requirements
-- Enhanced security features
-- Professional projects
-- Native executable distribution
+### Recommended Setup
+- Python 3.9+
+- 16GB RAM (for optimal binary compilation)
+- SSD storage (faster compilation times)
+- Recent Nuitka version (for binary features)
+
+## Error Handling & Troubleshooting
+
+### Common Issues
+1. **Nuitka Not Found**: Install with `pip install nuitka`
+2. **Low Memory**: Tool automatically uses `--low-memory` mode
+3. **GitHub API Limits**: Use different token or wait for reset
+4. **Compilation Timeout**: Increases automatically for large files
+
+### Debug Mode
+Disable anti-debug features during development:
+```bash
+python cerberus.py -i input.py -o output.py --no-debug-checks
+```
 
 ## License
 
 **Educational and Research Purposes Only**
 
 This software is provided for educational and legitimate security research purposes only. The developers are not responsible for any misuse of this tool.
+
+---
+
+**Author**: gvoze32  
+**Version**: 2.0  
+**Enhanced Features**: Binary compilation, advanced anti-debug, AES-256-CBC, PBKDF2
