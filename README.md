@@ -296,11 +296,3 @@ python cerberusbin.py -i example.py -o example_binary --binary
 **Educational and Research Purposes Only**
 
 This software is provided for educational and legitimate security research purposes only. The developers are not responsible for any misuse of this tool.
-
-## Author
-
-**gvoze32** - Advanced Python Obfuscation Research
-
----
-
-**"Protecting Python Code Through Advanced Obfuscation"** - Cerberus Obfuscator Suite 
