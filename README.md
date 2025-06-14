@@ -12,10 +12,10 @@ Cerberus v3.0 is the most advanced Python obfuscator that combines multi-layer e
 - **Salsa20**: Cryptographically secure stream cipher
 - **XOR with Extended Key**: Final layer with 256-byte key
 
-### 🖥️ Hardware Fingerprinting
-- **MAC Address Binding**: Script bound to device MAC address
-- **System Fingerprinting**: Platform, CPU, memory, and disk info
-- **Multi-Factor Key Derivation**: Using scrypt with N=2^16
+### 🚀 Portable Protection
+- **Universal Compatibility**: Scripts run on any compatible system
+- **Strong Key Derivation**: Using scrypt with N=2^16
+- **Entropy-Based Security**: Multiple entropy sources for key generation
 
 ### 🚫 Advanced Anti-Reverse Engineering
 
@@ -108,18 +108,18 @@ python cerberus.py -i script.py -o protected.py \
 
 | Level | Features | AI Decrypt Success Rate | Use Case |
 |-------|----------|------------------------|----------|
-| **Basic** | Quad-layer encryption + Hardware binding | <5% | Standard protection |
+| **Basic** | Quad-layer encryption + Portable | <5% | Standard protection |
 | **Advanced** | + Time bomb + GitHub Gist | <3% | Temporary deployment |
 | **Maximum** | + Usage limit + Binary + All features | <1% | Critical applications |
 
 ## 📊 Security Comparison
 
-| Obfuscator | Encryption Layers | Hardware Binding | Anti-Debug | VM Detection | AI Resistance |
-|------------|------------------|------------------|------------|--------------|---------------|
-| **Cerberus v3.0** | 4 (AES+ChaCha+Salsa+XOR) | ✅ MAC + System | 6 vectors | 10+ platforms | **<5%** |
-| PyArmor | 1 (AES) | ❌ | Basic | Limited | ~40% |
-| Pyinstaller | 0 (ZIP) | ❌ | None | None | ~90% |
-| Standard Base64 | 0 | ❌ | None | None | ~95% |
+| Obfuscator | Encryption Layers | Portability | Anti-Debug | VM Detection | AI Resistance |
+|------------|------------------|-------------|------------|--------------|---------------|
+| **Cerberus v3.0** | 4 (AES+ChaCha+Salsa+XOR) | ✅ Universal | 6 vectors | 10+ platforms | **<5%** |
+| PyArmor | 1 (AES) | ❌ Limited | Basic | Limited | ~40% |
+| Pyinstaller | 0 (ZIP) | ✅ | None | None | ~90% |
+| Standard Base64 | 0 | ✅ | None | None | ~95% |
 
 ## ⚙️ Command Line Options
 
@@ -146,13 +146,13 @@ arguments:
 
 🛡️  Ultra-Security Features Enabled:
    ✓ Quad-layer encryption (AES-256-GCM + ChaCha20 + Salsa20 + XOR)
-   ✓ Hardware fingerprinting with MAC address binding
    ✓ Advanced anti-debug protection (6 vectors)
    ✓ VM/Sandbox detection (10+ platforms)
    ✓ Real-time process monitoring
    ✓ Background security daemon
    ✓ Ultra-confusing variable name obfuscation
    ✓ Self-tamper detection and integrity checking
+   ✓ Portable protection (universal compatibility)
    ✓ Time bomb: expires 2025-12-31
    ✓ Usage limit: maximum 10 executions
 
@@ -169,20 +169,20 @@ arguments:
    Protection strength: MAXIMUM
 
 🎉 Your script is now ultra-secured and ready for deployment!
-   ⚠️  Keep this obfuscator and your system configuration safe
-   ⚠️  The protected script is hardware-bound to this machine
+   ⚠️  Keep this obfuscator safe for future obfuscation needs
+   ✅  The protected script can run on any compatible system
 ```
 
 ## 🔐 How It Works
 
-### 1. Hardware Fingerprinting
+### 1. Strong Key Derivation
 ```python
-# System fingerprint from platform info
-system_fp = SHA3_256(platform_info)
+# Entropy-based key generation
+master_entropy = secrets.token_bytes(64)
 
-# Hardware fingerprint from MAC address
-mac = uuid.getnode()
-hardware_fp = BLAKE2b(system_fp + mac_bytes)
+# Multi-purpose key derivation
+key_material = master_entropy + optional_github_token
+derived_key = scrypt(key_material, salt, N=2**16, r=8, p=1)
 ```
 
 ### 2. Quad-Layer Encryption
@@ -214,10 +214,10 @@ def security_monitor():
 
 ## 🚨 Security Warnings
 
-⚠️ **IMPORTANT**: Protected scripts are **hardware-bound** to this machine
-- Cannot run on different computers
-- Hardware changes will prevent script execution
-- Backup obfuscator and system configuration safely
+⚠️ **IMPORTANT**: Protected scripts are **portable and universal**
+- Can run on any compatible system with required dependencies
+- Keep your obfuscator safe for future obfuscation needs
+- Backup obfuscator configuration safely
 
 ⚠️ **GitHub Token**: Use tokens with minimal scope (gist only)
 
@@ -226,11 +226,11 @@ def security_monitor():
 ## 🛠️ Troubleshooting
 
 ### Protected Script Won't Run
-1. **Hardware Mismatch**: Script bound to different hardware
-2. **Missing Library**: Install `pycryptodome`
-3. **VM Detection**: Run on bare metal (not VM)
-4. **Time Bomb**: Check if expired
-5. **Usage Limit**: Reached execution limit
+1. **Missing Library**: Install `pycryptodome`
+2. **VM Detection**: Some VMs may trigger protection (intended behavior)
+3. **Time Bomb**: Check if expired
+4. **Usage Limit**: Reached execution limit
+5. **Dependencies**: Ensure all required packages are installed
 
 ### Compilation Error
 1. **Nuitka Missing**: `pip install nuitka`
@@ -259,7 +259,7 @@ def security_monitor():
 - **Algorithm**: scrypt (RFC 7914)
 - **Parameters**: N=2^16, r=8, p=1
 - **Salt**: SHA-256 of purpose string
-- **Input**: Master entropy + System FP + Hardware FP
+- **Input**: Master entropy + Optional GitHub token
 
 ### Protection Mechanisms
 - **Anti-Debug**: 6-vector detection system

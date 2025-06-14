@@ -5,7 +5,6 @@ Version: 3.0 Ultra
 
 Ultra-Advanced Features:
 - Quad-layer encryption (AES-256-GCM + ChaCha20 + Salsa20 + XOR)
-- Hardware fingerprinting with MAC address binding
 - Advanced VM/Sandbox detection (10+ platforms)
 - GitHub Gist integration for one-time execution
 - Nuitka binary compilation support
@@ -14,6 +13,7 @@ Ultra-Advanced Features:
 - Background protection monitoring
 - Self-tamper detection and integrity checking
 - Ultra-confusing variable name obfuscation
+- Portable protection (runs on any compatible system)
 
 Dependencies:
 - pycryptodome (required)
@@ -100,8 +100,6 @@ class CerberusUltraSecure:
         
         # Ultra-secure encryption setup
         self.master_entropy = secrets.token_bytes(64)
-        self.system_fingerprint = self._generate_system_fingerprint()
-        self.hardware_fingerprint = self._generate_hardware_fingerprint()
         
         # Multi-layer encryption keys
         self.aes_key = self._derive_key("AES_LAYER", 32)
@@ -120,53 +118,12 @@ class CerberusUltraSecure:
         self.gist_filename = None
         self.original_hash = None
         
-    def _generate_system_fingerprint(self) -> bytes:
-        """Generate unique system fingerprint"""
-        components = [
-            platform.system(),
-            platform.machine(), 
-            platform.processor(),
-            platform.platform()
-        ]
-        
-        # Add network info if available
-        try:
-            import socket
-            components.append(socket.gethostname())
-        except:
-            pass
-        
-        # Add hardware info if psutil available
-        if HAS_PSUTIL:
-            try:
-                components.extend([
-                    str(psutil.cpu_count()),
-                    str(psutil.virtual_memory().total),
-                    str(psutil.disk_usage('/').total)
-                ])
-            except:
-                pass
-        
-        fingerprint_data = '|'.join(components).encode('utf-8')
-        return SHA3_256.new(fingerprint_data).digest()
-    
-    def _generate_hardware_fingerprint(self) -> bytes:
-        """Generate hardware-specific fingerprint"""
-        try:
-            # MAC address
-            mac = uuid.getnode()
-            mac_bytes = struct.pack('>Q', mac)
-            
-            # Combine with system fingerprint
-            combined = self.system_fingerprint + mac_bytes
-            return BLAKE2b.new(data=combined, digest_bits=256).digest()
-        except:
-            return secrets.token_bytes(32)
+
     
     def _derive_key(self, purpose: str, length: int) -> bytes:
         """Derive encryption key from multiple entropy sources"""
         salt = hashlib.sha256(purpose.encode()).digest()
-        key_material = self.master_entropy + self.system_fingerprint + self.hardware_fingerprint
+        key_material = self.master_entropy
         
         if self.github_token:
             key_material += self.github_token.encode()
@@ -280,11 +237,10 @@ class CerberusUltraSecure:
 '''
         
         loader_template = f'''#!/usr/bin/env python3
-import sys, os, time, threading, gc, platform, socket, uuid, struct, random, secrets, base64, hashlib
+import sys, os, time, threading, gc, platform, socket, random, secrets, base64, hashlib
 from datetime import datetime
 from Crypto.Cipher import AES, ChaCha20, Salsa20
 from Crypto.Protocol.KDF import scrypt
-from Crypto.Hash import SHA3_256, BLAKE2b
 
 {names[0]} = bytes.fromhex('{self.master_entropy.hex()}')
 {names[1]} = 0
@@ -390,37 +346,10 @@ def {names[6]}():
         if os.path.exists(vm_file):
             os._exit(random.randint(1, 255))
 
-def {names[7]}():
-    components = [platform.system(), platform.machine(), platform.processor(), platform.platform()]
-    try:
-        components.append(socket.gethostname())
-    except:
-        pass
-    try:
-        import psutil
-        components.extend([str(psutil.cpu_count()), str(psutil.virtual_memory().total), 
-                         str(psutil.disk_usage('/').total)])
-    except:
-        pass
-    fingerprint_data = '|'.join(components).encode('utf-8')
-    return SHA3_256.new(fingerprint_data).digest()
-
-def {names[8]}():
-    try:
-        mac = uuid.getnode()
-        mac_bytes = struct.pack('>Q', mac)
-        system_fp = {names[7]}()
-        combined = system_fp + mac_bytes
-        return BLAKE2b.new(data=combined, digest_bits=256).digest()
-    except:
-        return secrets.token_bytes(32)
-
 def {names[9]}(purpose: str, length: int) -> bytes:
     global {names[0]}
     salt = hashlib.sha256(purpose.encode()).digest()
-    system_fp = {names[7]}()
-    hardware_fp = {names[8]}()
-    key_material = {names[0]} + system_fp + hardware_fp
+    key_material = {names[0]}
     return scrypt(key_material, salt, length, N=2**16, r=8, p=1)
 
 def {names[10]}(data: bytes) -> bytes:
@@ -619,7 +548,6 @@ def main():
         epilog='''
 Security Features:
 • Quad-layer encryption (AES-256-GCM + ChaCha20 + Salsa20 + XOR)
-• Hardware fingerprinting with MAC address binding
 • Advanced VM/Sandbox detection (10+ platforms)
 • Real-time anti-debug and process monitoring
 • Background security monitoring daemon
@@ -627,6 +555,7 @@ Security Features:
 • GitHub Gist integration for one-time execution
 • Time bomb and usage limit protection
 • Nuitka binary compilation support
+• Portable protection (runs on any compatible system)
 
 Examples:
   %(prog)s -i script.py -o protected.py
@@ -695,7 +624,6 @@ Examples:
     # Display enabled security features
     print("\n🛡️  Ultra-Security Features Enabled:")
     print("   ✓ Quad-layer encryption (AES-256-GCM + ChaCha20 + Salsa20 + XOR)")
-    print("   ✓ Hardware fingerprinting with MAC address binding")
     print("   ✓ Advanced anti-debug protection (6 vectors)")
     print("   ✓ VM/Sandbox detection (10+ platforms)")
     print("   ✓ Real-time process monitoring")
@@ -742,8 +670,8 @@ Examples:
         print(f"   Protection strength: MAXIMUM")
         
         print("\n🎉 Your script is now ultra-secured and ready for deployment!")
-        print("   ⚠️  Keep this obfuscator and your system configuration safe")
-        print("   ⚠️  The protected script is hardware-bound to this machine")
+        print("   ⚠️  Keep this obfuscator safe for future obfuscation needs")
+        print("   ✅  The protected script can run on any compatible system")
         
     except Exception as e:
         print(f"❌ Obfuscation failed: {e}")
