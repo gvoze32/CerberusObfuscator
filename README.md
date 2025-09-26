@@ -51,4 +51,4 @@ cerberus -i example.py -o protected.py --binary
 
 ## License
 
-MIT © Syafa Adena
+MIT © gvoze32
