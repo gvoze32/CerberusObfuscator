@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Cerberus - Ultra-Secure Multi-Layer Python Obfuscator
-Version: 3.0 Ultra
+Version: 3.1 Ultra
 
 Ultra-Advanced Features:
 - Quad-layer encryption (AES-256-GCM + ChaCha20 + Salsa20 + XOR)
@@ -95,7 +95,7 @@ class CerberusUltraSecure:
             self.api_headers = {
                 'Authorization': f'token {github_token}',
                 'Accept': 'application/vnd.github.v3+json',
-                'User-Agent': 'CerberusUltra/3.0'
+                'User-Agent': 'CerberusUltra/3.1'
             }
         
         # Ultra-secure encryption setup
@@ -543,7 +543,7 @@ if __name__ == "__main__":
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Cerberus Ultra-Secure Python Obfuscator v3.0',
+        description='Cerberus Ultra-Secure Python Obfuscator v3.1',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Security Features:
@@ -575,7 +575,7 @@ Examples:
     
     args = parser.parse_args()
     
-    print("🛡️  Cerberus Ultra-Secure Obfuscator v3.0")
+    print("🛡️  Cerberus Ultra-Secure Obfuscator v3.1")
     print("=" * 55)
     
     # Validate and parse time bomb
