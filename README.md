@@ -51,4 +51,4 @@ cerberus -i example.py -o protected.py --binary
 
 ## License
 
-MIT © gvoze32
+This project is licensed under the ISC License. See the LICENSE file for details.
