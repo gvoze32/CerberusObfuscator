@@ -17,5 +17,3 @@ class ObfuscationFailure(CerberusError):
 
 class BinaryCompilationFailure(CerberusError):
     """Raised when Nuitka binary compilation fails."""
-
-

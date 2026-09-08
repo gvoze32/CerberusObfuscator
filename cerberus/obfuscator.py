@@ -4,19 +4,28 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import random
+import hmac
+import os
 import secrets
 import string
 import subprocess
-import textwrap
+import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
 
 from .config import CerberusConfig
-from .encryption import EntropyMaterial, build_cipher
-from .exceptions import BinaryCompilationFailure, ObfuscationFailure
+from .encryption import EntropyMaterial, PayloadCipher, build_cipher
+from .exceptions import (
+    BinaryCompilationFailure,
+    ConfigurationError,
+    ObfuscationFailure,
+)
 from .names import NameGenerator
+
+_STANDARD_ALPHABET = (
+    string.ascii_uppercase + string.ascii_lowercase + string.digits + "+/"
+)
 
 
 @dataclass(slots=True)
@@ -24,7 +33,7 @@ class ObfuscationResult:
     output_path: Path
     original_size: int
     protected_size: int
-    binary_path: Optional[Path] = None
+    binary_path: Path | None = None
 
     @property
     def size_ratio(self) -> float:
@@ -37,56 +46,62 @@ class CerberusObfuscator:
     _name_gen: NameGenerator = field(default_factory=NameGenerator)
 
     def _fragment_payload(self, payload: str) -> list[tuple[int, str]]:
-        chunk_size = random.randint(16, 32)
-        pieces = [payload[i : i + chunk_size] for i in range(0, len(payload), chunk_size)]
-        indexed = list(enumerate(pieces))
-        random.shuffle(indexed)
+        """Split and shuffle payload fragments using non-sequential identifiers."""
+
+        chunk_size = 16 + secrets.randbelow(17)
+        pieces = [
+            payload[i : i + chunk_size] for i in range(0, len(payload), chunk_size)
+        ]
+        if not pieces:
+            pieces = [""]
+
+        fragment_ids = sorted(
+            secrets.SystemRandom().sample(range(1, 2**31), len(pieces))
+        )
+        indexed = list(zip(fragment_ids, pieces))
+        secrets.SystemRandom().shuffle(indexed)
         return indexed
-
-    def _fake_payload(self, length: int) -> str:
-        alphabet = string.ascii_letters + string.digits + "+/="
-        return ''.join(random.choice(alphabet) for _ in range(length))
-
-    def _mask_xor_key(self, key: bytes) -> tuple[int, int, list[int]]:
-        mask = random.randint(0x10, 0xFE)
-        offset = random.randint(1, 0x3F)
-        masked = [((byte ^ mask) + offset) & 0xFF for byte in key]
-        return mask, offset, masked
 
     def _read_source(self) -> str:
         self.config.ensure_paths()
-        return self.config.input_path.read_text(encoding="utf-8")
+        return self.config.input_path.expanduser().read_text(encoding="utf-8")
 
-    def _build_cipher(self, master_entropy: bytes, github_token: Optional[str]):
-        material = EntropyMaterial(master_entropy, github_token)
-        return build_cipher(material)
+    def _read_runtime_secret(self) -> bytes:
+        env_name = self.config.runtime_secret_env
+        if env_name is None:
+            return b""
 
-    def _generate_names(self) -> Dict[str, str]:
+        value = os.environ.get(env_name)
+        if not value:
+            raise ConfigurationError(
+                f"runtime secret environment variable {env_name!r} is missing or empty"
+            )
+        return value.encode("utf-8")
+
+    def _encode_payload(self, payload: bytes, alphabet: str) -> str:
+        encoded = base64.b64encode(payload).decode("ascii")
+        return encoded.translate(str.maketrans(_STANDARD_ALPHABET, alphabet))
+
+    def _generate_names(self) -> dict[str, str]:
         keys = [
-            "entropy",
-            "usage_counter",
-            "canaries",
-            "session",
+            "seed",
+            "salt",
+            "context",
+            "alphabet",
+            "secret_env",
+            "fragments",
+            "join",
+            "decode",
             "derive",
             "decrypt",
             "load",
-            "guard",
-            "monitor",
-            "anti_debug",
-            "environment_check",
-            "payload_fragments",
-            "payload_join",
-            "integrity_hash",
+            "integrity_tag",
+            "integrity_slot",
             "verify_loader",
-            "verify_payload",
-            "decode_payload",
-            "fake_decrypt",
-            "fake_key",
-            "key_schedule",
-            "xor_mask",
-            "xor_offset",
-            "xor_key_stream",
-            "fake_payloads",
+            "usage",
+            "guard",
+            "debug_check",
+            "execute",
         ]
         return self._name_gen.bundle(keys)
 
@@ -94,259 +109,298 @@ class CerberusObfuscator:
         self,
         fragments: list[tuple[int, str]],
         entropy_hex: str,
-        names: Dict[str, str],
-        masked_key: list[int],
-        xor_mask: int,
-        xor_offset: int,
-        payload_digest: str,
-        fake_payloads: list[str],
+        salt_hex: str,
+        context_hex: str,
+        alphabet: str,
+        names: dict[str, str],
+        integrity_slot: str,
     ) -> str:
-        time_bomb_check = (
-            f"if datetime.now() > datetime.fromisoformat('{self.config.time_bomb.isoformat()}'):\n"
-            "        os._exit(random.randint(1, 255))"
-            if self.config.time_bomb
-            else "pass"
-        )
-        usage_limit_check = (
-            f"if {names['usage_counter']} > {self.config.usage_limit}:\n        os._exit(random.randint(1, 255))"
-            if self.config.usage_limit
-            else "pass"
-        )
-
-        def _escape(text: str) -> str:
-            return repr(text)[1:-1]
+        def _quote(value: object) -> str:
+            return repr(value)
 
         fragment_lines = "\n".join(
-            f"{names['payload_fragments']}[{idx}] = '{_escape(chunk)}'"
-            for idx, chunk in fragments
+            f"{names['fragments']}[{fragment_id}] = {_quote(chunk)}"
+            for fragment_id, chunk in fragments
         )
 
-        fake_payload_lines = "\n".join(
-            f"    base64.b64decode('{_escape(payload)}')" for payload in fake_payloads
+        time_bomb_check = (
+            f"    if time.time() >= {self.config.time_bomb_timestamp!r}:\n"
+            "        raise RuntimeError('protected payload has expired')"
+            if self.config.time_bomb
+            else "    pass"
         )
-
-        gist_block = "pass"
-        if self.config.requires_gist:
-            gist_block = textwrap.dedent(
-                """
-                try:
-                    import requests
-                    resp = requests.get('https://api.github.com/gists', timeout=3)
-                    if resp.status_code != 200:
-                        os._exit(random.randint(1, 255))
-                except Exception:
-                    os._exit(random.randint(1, 255))
-                """
-            ).strip()
+        usage_check = (
+            f"    {names['usage']}({self.config.usage_limit})"
+            if self.config.usage_limit
+            else "    pass"
+        )
+        debug_check = (
+            f"    {names['debug_check']}()" if self.config.anti_debug else "    pass"
+        )
 
         loader = f"""#!/usr/bin/env python3
 import base64
+import binascii
 import hashlib
-import importlib
+import hmac
 import os
-import platform
-import random
-import secrets
-import socket
 import sys
-import threading
 import time
-from datetime import datetime
 
-from Crypto.Cipher import AES, ChaCha20, Salsa20
+from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import scrypt
 
-{names['entropy']} = bytes.fromhex('{entropy_hex}')
-{names['usage_counter']} = 0
-{names['canaries']} = [secrets.randbits(64) for _ in range(16)]
-{names['session']} = {{'session_start': time.time(), 'violations': 0}}
-{names['payload_fragments']} = {{idx: '' for idx in range({len(fragments)})}}
-{names['integrity_hash']} = '{payload_digest}'
-{names['xor_mask']} = {xor_mask}
-{names['xor_offset']} = {xor_offset}
-{names['xor_key_stream']} = bytes({masked_key})
+{names["seed"]} = bytes.fromhex({_quote(entropy_hex)})
+{names["salt"]} = bytes.fromhex({_quote(salt_hex)})
+{names["context"]} = bytes.fromhex({_quote(context_hex)})
+{names["alphabet"]} = {_quote(alphabet)}
+{names["secret_env"]} = {_quote(self.config.runtime_secret_env or "")}
+{names["fragments"]} = {{}}
+{names["integrity_tag"]} = {_quote(integrity_slot)}
+{names["integrity_slot"]} = {_quote(integrity_slot)}
 
 {fragment_lines}
 
-def {names['fake_key']}(length: int) -> bytes:
-    noise = secrets.token_bytes(length)
-    return hashlib.sha256(noise).digest()[:length]
 
-def {names['fake_decrypt']}(blob: bytes) -> bytes:
-    bogus_key = {names['fake_key']}(len(blob))
-    return bytes((b ^ bogus_key[idx % len(bogus_key)]) for idx, b in enumerate(blob))
+def {names["derive"]}() -> bytes:
+    secret = b''
+    if {names["secret_env"]}:
+        value = os.environ.get({names["secret_env"]})
+        if not value:
+            raise RuntimeError('required runtime secret is missing')
+        secret = value.encode('utf-8')
+    material = {names["seed"]} + b'\\x00' + secret
+    return scrypt(material, {names["salt"]}, 32, N=2**15, r=8, p=1)
 
-def {names['payload_join']}() -> str:
-    ordered = ''.join({names['payload_fragments']}[idx] for idx in sorted({names['payload_fragments']}.keys()))
-    return ordered
 
-def {names['decode_payload']}() -> bytes:
-    assembled = {names['payload_join']}()
+def {names["verify_loader"]}(key: bytes) -> None:
+    if getattr(sys, 'frozen', False):
+        return
+    path = globals().get('__file__')
+    if not path or not os.path.isfile(path):
+        return
     try:
-        candidate = base64.b64decode(assembled)
-    except Exception:
-        os._exit(random.randint(1, 255))
-    return candidate
+        with open(path, 'rb') as handle:
+            data = handle.read()
+    except OSError as exc:
+        raise RuntimeError('loader integrity check unavailable') from exc
 
-def {names['verify_payload']}(decoder):
-    candidate = decoder()
-    digest = hashlib.sha3_256(candidate).hexdigest()
-    if digest != {names['integrity_hash']}:
-        os._exit(random.randint(1, 255))
+    expected = {names["integrity_tag"]}
+    normalized = data.replace(
+        expected.encode('ascii'), {names["integrity_slot"]}.encode('ascii'), 1
+    )
+    integrity_key = hmac.new(
+        key, b'cerberus-loader-integrity-v1', hashlib.sha256
+    ).digest()
+    actual = hmac.new(integrity_key, normalized, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(actual, expected):
+        raise RuntimeError('loader integrity check failed')
 
-def {names['fake_payloads']}():
-    return [
-{fake_payload_lines}
-    ]
 
-def {names['verify_loader']}():
-    module = sys.modules.get('__main__')
-    path = getattr(module, '__file__', None)
-    if not path or not os.path.exists(path):
-        os._exit(random.randint(1, 255))
-    with open(path, 'rb') as handle:
-        data = handle.read()
-    checksum = hashlib.sha3_256(data).hexdigest()
-    if checksum[:32] == checksum[32:]:
-        os._exit(random.randint(1, 255))
+def {names["join"]}() -> str:
+    return ''.join(
+        {names["fragments"]}[fragment_id]
+        for fragment_id in sorted({names["fragments"]})
+    )
 
-def {names['derive']}(purpose: str, length: int) -> bytes:
-    salt = hashlib.sha256(purpose.encode('utf-8')).digest()
-    return scrypt({names['entropy']}, salt, length, N=2**16, r=8, p=1)
 
-def {names['key_schedule']}(seed: bytes) -> bytes:
-    mutated = bytearray(seed)
-    for idx in range(len(mutated)):
-        mutated[idx] ^= (({names['xor_mask']} >> (idx % 8)) & 0xFF)
-        mutated[idx] = (mutated[idx] + {names['xor_offset']} + idx) & 0xFF
-    return bytes(mutated)
-
-def {names['decrypt']}(data: bytes) -> bytes:
-    salsa_key = {names['derive']}('SALSA_LAYER', 32)
-    xor_key = {names['key_schedule']}({names['xor_key_stream']})
-    xor_stream = (xor_key * ((len(data) // len(xor_key)) + 1))[:len(data)]
-    salsa_blob = bytes(a ^ b for a, b in zip(data, xor_stream))
-
-    salsa_nonce = salsa_blob[:8]
-    salsa_cipher = Salsa20.new(key=salsa_key, nonce=salsa_nonce)
-    chacha_blob = salsa_cipher.decrypt(salsa_blob[8:])
-
-    chacha_key = {names['derive']}('CHACHA_LAYER', 32)
-    chacha_nonce = chacha_blob[:12]
-    chacha_cipher = ChaCha20.new(key=chacha_key, nonce=chacha_nonce)
-    aes_blob = chacha_cipher.decrypt(chacha_blob[12:])
-
-    aes_key = {names['derive']}('AES_LAYER', 32)
-    aes_nonce = aes_blob[:16]
-    aes_tag = aes_blob[16:32]
-    aes_cipher = AES.new(aes_key, AES.MODE_GCM, nonce=aes_nonce)
-    return aes_cipher.decrypt_and_verify(aes_blob[32:], aes_tag)
-
-def {names['load']}():
-    {names['verify_loader']}()
-    decoded = {names['decode_payload']}()
-    return {names['decrypt']}(decoded)
-
-def {names['anti_debug']}():
-    if hasattr(sys, 'gettrace') and sys.gettrace() is not None:
-        os._exit(random.randint(1, 255))
+def {names["decode"]}() -> bytes:
+    assembled = {names["join"]}()
     try:
-        frame = sys._getframe()
-        if frame and (frame.f_trace or (frame.f_back and frame.f_back.f_trace)):
-            os._exit(random.randint(1, 255))
-    except Exception:
-        pass
+        canonical = assembled.translate(
+            str.maketrans({names["alphabet"]},
+                          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/')
+        )
+        return base64.b64decode(canonical, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise RuntimeError('payload encoding is invalid') from exc
 
-def {names['environment_check']}():
-    signatures = ['vmware', 'virtualbox', 'qemu', 'xen', 'kvm', 'docker', 'sandbox']
-    system_fingerprint = (platform.system() + platform.machine() + platform.platform()).lower()
-    if any(sig in system_fingerprint for sig in signatures):
-        os._exit(random.randint(1, 255))
 
-def {names['guard']}():
-    {time_bomb_check}
-    {names['usage_counter']} += 1
-    {usage_limit_check}
-    {names['verify_payload']}({names['decode_payload']})
+def {names["decrypt"]}(data: bytes, key: bytes) -> bytes:
+    if len(data) < 28:
+        raise RuntimeError('payload is truncated')
 
-{gist_block}
+    nonce = data[:12]
+    tag = data[12:28]
+    ciphertext = data[28:]
+    try:
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        cipher.update({names["context"]})
+        return cipher.decrypt_and_verify(ciphertext, tag)
+    except (ValueError, KeyError) as exc:
+        raise RuntimeError('payload authentication failed') from exc
 
-def {names['monitor']}():
-    while True:
-        time.sleep(random.uniform(1.5, 4.0))
-        start = time.perf_counter_ns()
-        {names['anti_debug']}()
-        {names['environment_check']}()
-        duration = time.perf_counter_ns() - start
-        if duration > 50_000_000:
-            os._exit(random.randint(1, 255))
-        {names['session']}['last_check'] = time.time()
-        importlib.invalidate_caches()
-        for hook in sys.meta_path:
-            if getattr(hook, '__class__', None).__name__.lower().startswith('decomp'):
-                os._exit(random.randint(1, 255))
 
-def main():
-    for decoy in {names['fake_payloads']}():
-        {names['fake_decrypt']}(decoy)
-    threading.Thread(target={names['monitor']}, daemon=True).start()
-    {names['guard']}()
-    decrypted = {names['load']}()
-    exec(decrypted, {{'__name__': '__main__'}})
+def {names["load"]}() -> str:
+    key = {names["derive"]}()
+    {names["verify_loader"]}(key)
+    return {names["decrypt"]}({names["decode"]}(), key).decode('utf-8')
+
+
+def {names["usage"]}(limit: int) -> None:
+    if not limit:
+        return
+
+    state_path = f"{{__file__}}.usage"
+    lock_module = None
+    try:
+        with open(state_path, 'a+', encoding='ascii') as state:
+            try:
+                import fcntl as lock_module
+                lock_module.flock(state.fileno(), lock_module.LOCK_EX)
+            except (ImportError, OSError):
+                lock_module = None
+
+            try:
+                state.seek(0)
+                raw = state.read().strip()
+                count = int(raw or '0') + 1
+                if count > limit:
+                    raise RuntimeError('usage limit exceeded')
+                state.seek(0)
+                state.truncate()
+                state.write(str(count))
+                state.flush()
+                os.fsync(state.fileno())
+            finally:
+                if lock_module is not None:
+                    lock_module.flock(state.fileno(), lock_module.LOCK_UN)
+    except ValueError as exc:
+        raise RuntimeError('usage state is invalid') from exc
+    except OSError as exc:
+        raise RuntimeError('usage state is unavailable') from exc
+
+
+def {names["debug_check"]}() -> None:
+    gettrace = getattr(sys, 'gettrace', None)
+    if gettrace is not None and gettrace() is not None:
+        raise RuntimeError('debugger detected')
+
+
+def {names["guard"]}() -> None:
+{time_bomb_check}
+{usage_check}
+{debug_check}
+
+
+def {names["execute"]}() -> None:
+    decrypted = {names["load"]}()
+    namespace = {{
+        '__name__': '__main__',
+        '__file__': __file__,
+        '__package__': None,
+    }}
+    exec(decrypted, namespace, namespace)
+
 
 if __name__ == '__main__':
-    main()
+    {names["guard"]}()
+    {names["execute"]}()
 """
-
         return loader
+
+    def _write_output(self, loader_code: str) -> None:
+        output_path = self.config.output_path.expanduser()
+        file_descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{output_path.name}.",
+            suffix=".tmp",
+            dir=output_path.parent,
+            text=True,
+        )
+        try:
+            with os.fdopen(
+                file_descriptor, "w", encoding="utf-8", newline="\n"
+            ) as handle:
+                file_descriptor = -1
+                handle.write(loader_code)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_name, output_path)
+        except OSError as exc:
+            raise ObfuscationFailure(f"failed to write output: {output_path}") from exc
+        finally:
+            if file_descriptor >= 0:
+                os.close(file_descriptor)
+            try:
+                os.unlink(temporary_name)
+            except FileNotFoundError:
+                pass
 
     def obfuscate(self) -> ObfuscationResult:
         source = self._read_source()
-        master_entropy = secrets.token_bytes(64)
-        cipher = self._build_cipher(master_entropy, self.config.github_token)
-        encrypted = cipher.encrypt(source.encode("utf-8"))
-        encoded_payload = base64.b64encode(encrypted).decode("utf-8")
+        source_bytes = source.encode("utf-8")
+        entropy = secrets.token_bytes(32)
+        salt = secrets.token_bytes(16)
+        context = secrets.token_bytes(16)
+        runtime_secret = self._read_runtime_secret()
+        cipher: PayloadCipher = build_cipher(
+            EntropyMaterial(entropy, runtime_secret),
+            salt,
+            context,
+        )
+        alphabet = "".join(secrets.SystemRandom().sample(_STANDARD_ALPHABET, 64))
+        encoded_payload = self._encode_payload(cipher.encrypt(source_bytes), alphabet)
         fragments = self._fragment_payload(encoded_payload)
-        xor_mask, xor_offset, masked_key = self._mask_xor_key(cipher.xor_key)
-        fake_payloads = [self._fake_payload(len(encoded_payload)) for _ in range(3)]
-        digest = hashlib.sha3_256(encoded_payload.encode("utf-8")).hexdigest()
+        names = self._generate_names()
+        integrity_slot = f"__cerberus_{secrets.token_hex(16)}__"
+
         try:
-            names = self._generate_names()
             loader_code = self._render_loader(
                 fragments=fragments,
-                entropy_hex=master_entropy.hex(),
+                entropy_hex=entropy.hex(),
+                salt_hex=salt.hex(),
+                context_hex=context.hex(),
+                alphabet=alphabet,
                 names=names,
-                masked_key=masked_key,
-                xor_mask=xor_mask,
-                xor_offset=xor_offset,
-                payload_digest=digest,
-                fake_payloads=fake_payloads,
+                integrity_slot=integrity_slot,
             )
+            compile(loader_code, str(self.config.output_path), "exec")
+            integrity_key = hmac.new(
+                cipher.key,
+                b"cerberus-loader-integrity-v1",
+                hashlib.sha256,
+            ).digest()
+            integrity_tag = hmac.new(
+                integrity_key,
+                loader_code.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            assignment = f"{names['integrity_tag']} = {integrity_slot!r}"
+            if loader_code.count(assignment) != 1:
+                raise ObfuscationFailure("failed to place loader integrity tag")
+            loader_code = loader_code.replace(
+                assignment,
+                f"{names['integrity_tag']} = {integrity_tag!r}",
+                1,
+            )
+        except ObfuscationFailure:
+            raise
         except Exception as exc:  # pragma: no cover - defensive
             raise ObfuscationFailure("failed to render loader") from exc
 
-        self.config.output_path.write_text(loader_code, encoding="utf-8")
+        self._write_output(loader_code)
 
         binary_path = None
         if self.config.compile_binary:
-            binary_path = self._compile_binary(self.config.output_path)
+            binary_path = self._compile_binary(self.config.output_path.expanduser())
 
         return ObfuscationResult(
-            output_path=self.config.output_path,
-            original_size=len(source.encode("utf-8")),
+            output_path=self.config.output_path.expanduser(),
+            original_size=len(source_bytes),
             protected_size=len(loader_code.encode("utf-8")),
             binary_path=binary_path,
         )
 
     def _compile_binary(self, script_path: Path) -> Path:
         cmd = [
-            "python",
+            sys.executable,
             "-m",
             "nuitka",
             "--standalone",
             "--onefile",
             "--remove-output",
             "--no-pyi-file",
+            f"--output-dir={script_path.parent}",
             f"--output-filename={script_path.stem}",
             str(script_path),
         ]
@@ -362,11 +416,11 @@ if __name__ == '__main__':
         except subprocess.TimeoutExpired as exc:
             raise BinaryCompilationFailure("binary compilation timed out") from exc
         except subprocess.CalledProcessError as exc:
-            raise BinaryCompilationFailure(exc.stderr or "binary compilation failed") from exc
+            raise BinaryCompilationFailure(
+                exc.stderr or "binary compilation failed"
+            ) from exc
 
         binary_path = script_path.with_suffix("")
         if not binary_path.exists():
             raise BinaryCompilationFailure("expected binary output missing")
         return binary_path
-
-

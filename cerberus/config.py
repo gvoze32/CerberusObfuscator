@@ -2,53 +2,77 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+
+from .exceptions import ConfigurationError
+
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
 @dataclass(slots=True)
 class CerberusConfig:
-    """Immutable configuration for the Cerberus obfuscator."""
+    """Validated configuration for one obfuscation build."""
 
     input_path: Path
     output_path: Path
-    github_token: Optional[str] = None
+    runtime_secret_env: str | None = None
     compile_binary: bool = False
-    time_bomb: Optional[datetime] = None
+    time_bomb: datetime | None = None
     usage_limit: int = 0
     binary_timeout: int = 300
+    anti_debug: bool = False
 
     def __post_init__(self) -> None:
         if self.usage_limit < 0:
-            msg = "usage_limit must be non-negative"
-            raise ValueError(msg)
+            raise ConfigurationError("usage_limit must be non-negative")
 
-        if self.time_bomb and self.time_bomb <= datetime.now():
-            msg = "time_bomb must be a future datetime"
-            raise ValueError(msg)
+        if (
+            self.time_bomb
+            and self.time_bomb_timestamp <= datetime.now(timezone.utc).timestamp()
+        ):
+            raise ConfigurationError("time_bomb must be a future datetime")
 
         if self.binary_timeout <= 0:
-            msg = "binary_timeout must be positive"
-            raise ValueError(msg)
+            raise ConfigurationError("binary_timeout must be positive")
+
+        if self.runtime_secret_env is not None and not _ENV_NAME.fullmatch(
+            self.runtime_secret_env
+        ):
+            raise ConfigurationError(
+                "runtime_secret_env must be a valid environment variable name"
+            )
 
     @property
-    def requires_gist(self) -> bool:
-        return self.github_token is not None
+    def time_bomb_timestamp(self) -> float:
+        """Return the expiry instant as a UTC Unix timestamp."""
+
+        if self.time_bomb is None:
+            raise ConfigurationError("time_bomb is not configured")
+
+        value = self.time_bomb
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).timestamp()
 
     def ensure_paths(self) -> None:
-        """Ensure input exists and parent of output is ready."""
+        """Ensure the input exists and the output cannot overwrite it."""
 
-        if not self.input_path.exists():
-            msg = f"Input file does not exist: {self.input_path}"
-            raise FileNotFoundError(msg)
+        input_path = self.input_path.expanduser()
+        output_path = self.output_path.expanduser()
 
-        if not self.input_path.is_file():
-            msg = f"Input path is not a file: {self.input_path}"
-            raise IsADirectoryError(msg)
+        if not input_path.exists():
+            raise FileNotFoundError(f"Input file does not exist: {input_path}")
+        if not input_path.is_file():
+            raise IsADirectoryError(f"Input path is not a file: {input_path}")
 
-        output_parent = self.output_path.parent
-        output_parent.mkdir(parents=True, exist_ok=True)
-
-
+        try:
+            if input_path.resolve() == output_path.resolve():
+                raise ConfigurationError("input and output paths must be different")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ConfigurationError(
+                f"unable to prepare output path: {output_path}"
+            ) from exc

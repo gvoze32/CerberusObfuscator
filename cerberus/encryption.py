@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
-from typing import Optional
+from typing import cast
 
-from Crypto.Cipher import AES, ChaCha20, Salsa20
+from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import scrypt
 from Crypto.Random import get_random_bytes
+
+KDF_N = 2**15
+KDF_R = 8
+KDF_P = 1
+PAYLOAD_AAD = b"cerberus-payload-v4"
+NONCE_SIZE = 12
+TAG_SIZE = 16
 
 
 class KeyDerivationError(RuntimeError):
@@ -16,91 +22,78 @@ class KeyDerivationError(RuntimeError):
 
 
 class PayloadDecryptionError(RuntimeError):
-    """Raised when an encrypted payload cannot be decrypted."""
+    """Raised when an authenticated payload cannot be decrypted."""
 
 
 @dataclass(slots=True)
 class EntropyMaterial:
-    """Entropy holder that optionally mixes a GitHub token into the pool."""
+    """Build-time entropy plus an optional secret supplied at runtime."""
 
     entropy: bytes
-    github_token: Optional[str] = None
+    runtime_secret: bytes | None = None
 
     def material(self) -> bytes:
-        payload = bytearray(self.entropy)
-        if self.github_token:
-            payload.extend(self.github_token.encode("utf-8"))
-        return bytes(payload)
+        if not self.entropy:
+            raise ValueError("entropy must not be empty")
+
+        secret = self.runtime_secret or b""
+        return self.entropy + b"\x00" + secret
 
 
-def derive_key(material: EntropyMaterial, purpose: str, length: int) -> bytes:
-    """Derive a symmetric key for ``purpose`` using scrypt."""
+def derive_key(material: EntropyMaterial, salt: bytes, length: int = 32) -> bytes:
+    """Derive a payload key using a per-build random salt."""
+
+    if len(salt) < 16:
+        raise KeyDerivationError("salt must contain at least 128 bits")
+    if length <= 0:
+        raise KeyDerivationError("key length must be positive")
 
     try:
-        salt = sha256(purpose.encode("utf-8")).digest()
-        return scrypt(material.material(), salt, length, N=2**16, r=8, p=1)
+        return cast(
+            bytes,
+            scrypt(material.material(), salt, length, N=KDF_N, r=KDF_R, p=KDF_P),  # type: ignore[arg-type]
+        )
     except Exception as exc:  # pragma: no cover - defensive
         raise KeyDerivationError("failed to derive key") from exc
 
 
 @dataclass(slots=True)
-class QuadLayerCipher:
-    """Applies the quad-layer encryption pipeline used by Cerberus."""
+class PayloadCipher:
+    """AES-GCM payload cipher with explicit framing and authentication."""
 
-    aes_key: bytes
-    chacha_key: bytes
-    salsa_key: bytes
-    xor_key: bytes
+    key: bytes
+    associated_data: bytes = PAYLOAD_AAD
 
     def encrypt(self, payload: bytes) -> bytes:
-        aes_cipher = AES.new(self.aes_key, AES.MODE_GCM)
-        aes_ct, aes_tag = aes_cipher.encrypt_and_digest(payload)
-        aes_blob = aes_cipher.nonce + aes_tag + aes_ct
-
-        chacha_nonce = get_random_bytes(12)
-        chacha_cipher = ChaCha20.new(key=self.chacha_key, nonce=chacha_nonce)
-        chacha_blob = chacha_nonce + chacha_cipher.encrypt(aes_blob)
-
-        salsa_nonce = get_random_bytes(8)
-        salsa_cipher = Salsa20.new(key=self.salsa_key, nonce=salsa_nonce)
-        salsa_blob = salsa_nonce + salsa_cipher.encrypt(chacha_blob)
-
-        xor_stream = (self.xor_key * ((len(salsa_blob) // len(self.xor_key)) + 1))[
-            : len(salsa_blob)
-        ]
-        return bytes(a ^ b for a, b in zip(salsa_blob, xor_stream))
+        cipher = AES.new(self.key, AES.MODE_GCM, nonce=get_random_bytes(NONCE_SIZE))
+        cipher.update(self.associated_data)
+        ciphertext, tag = cipher.encrypt_and_digest(payload)
+        return bytes(cipher.nonce) + bytes(tag) + bytes(ciphertext)
 
     def decrypt(self, payload: bytes) -> bytes:
+        if len(payload) < NONCE_SIZE + TAG_SIZE:
+            raise PayloadDecryptionError("payload is truncated")
+
+        nonce = payload[:NONCE_SIZE]
+        tag = payload[NONCE_SIZE : NONCE_SIZE + TAG_SIZE]
+        ciphertext = payload[NONCE_SIZE + TAG_SIZE :]
+
         try:
-            xor_stream = (self.xor_key * ((len(payload) // len(self.xor_key)) + 1))[
-                : len(payload)
-            ]
-            salsa_blob = bytes(a ^ b for a, b in zip(payload, xor_stream))
-
-            salsa_nonce = salsa_blob[:8]
-            salsa_cipher = Salsa20.new(key=self.salsa_key, nonce=salsa_nonce)
-            chacha_blob = salsa_cipher.decrypt(salsa_blob[8:])
-
-            chacha_nonce = chacha_blob[:12]
-            chacha_cipher = ChaCha20.new(key=self.chacha_key, nonce=chacha_nonce)
-            aes_blob = chacha_cipher.decrypt(chacha_blob[12:])
-
-            aes_nonce = aes_blob[:16]
-            aes_tag = aes_blob[16:32]
-            aes_cipher = AES.new(self.aes_key, AES.MODE_GCM, nonce=aes_nonce)
-            return aes_cipher.decrypt_and_verify(aes_blob[32:], aes_tag)
+            cipher = AES.new(self.key, AES.MODE_GCM, nonce=nonce)
+            cipher.update(self.associated_data)
+            return cipher.decrypt_and_verify(ciphertext, tag)
         except Exception as exc:  # pragma: no cover - defensive
-            raise PayloadDecryptionError("payload decryption failed") from exc
+            raise PayloadDecryptionError("payload authentication failed") from exc
 
 
-def build_cipher(material: EntropyMaterial) -> QuadLayerCipher:
-    """Construct a :class:`QuadLayerCipher` for the given material."""
+def build_cipher(
+    material: EntropyMaterial,
+    salt: bytes,
+    associated_data: bytes | None = None,
+) -> PayloadCipher:
+    """Construct an authenticated payload cipher for one build."""
 
-    return QuadLayerCipher(
-        aes_key=derive_key(material, "AES_LAYER", 32),
-        chacha_key=derive_key(material, "CHACHA_LAYER", 32),
-        salsa_key=derive_key(material, "SALSA_LAYER", 32),
-        xor_key=derive_key(material, "XOR_LAYER", 256),
+    return PayloadCipher(
+        key=derive_key(material, salt),
+        associated_data=associated_data or PAYLOAD_AAD,
     )
-
-

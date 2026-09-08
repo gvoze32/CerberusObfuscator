@@ -1,54 +1,89 @@
 # Cerberus Obfuscator
 
-Modernised Python obfuscator that wraps source code in a hardened loader
-featuring multi-layer symmetric encryption, optional binary compilation and
-runtime self-defence mechanisms.
+Cerberus packages a Python source file in a randomized loader. The loader uses
+AES-256-GCM, a per-build scrypt salt, randomized encoding and fragments, and a
+keyed loader-integrity check when the source path is available.
 
-## Key Features
+## Security model
 
-- Quad-layer payload encryption (AES-GCM → ChaCha20 → Salsa20 → XOR stream)
-- Entropy-rich key derivation with optional GitHub token mixing
-- Runtime anti-debugging and sandbox heuristics
-- Optional GitHub Gist validation to restrict one-time execution
-- Configurable usage limit and time-bomb guardrails
-- Optional Nuitka compilation with timeout controls
+A self-contained Python file must contain enough material to decrypt itself.
+That mode raises the cost of casual static extraction; it cannot protect source
+from the person who is allowed to run the file. A determined analyst can trace
+`exec`, inspect plaintext in memory, or patch the loader.
+
+For distributed files, keep the decryption secret outside the artifact:
+
+```bash
+export CERBERUS_SECRET="a-long-random-value"
+cerberus -i example.py -o protected.py --secret-env CERBERUS_SECRET
+CERBERUS_SECRET="$CERBERUS_SECRET" python3 protected.py
+```
+
+The secret is read from the environment during the build and at runtime; it is
+never written to `protected.py`. Do not pass secrets as command-line arguments
+because shells and process monitors can record them.
+
+The optional `--anti-debug` switch only rejects Python tracing. It is a
+best-effort signal, not a reliable anti-debug or anti-decompile boundary.
+`--time-bomb` uses the local UTC clock, and `--usage-limit` uses a writable
+`<protected-file>.usage` counter; both are policy controls that a local user can
+modify or bypass.
+
+Nuitka compilation can increase reverse-engineering cost. The source-file
+integrity check is unavailable inside onefile binaries, and compilation does
+not turn Python code into a secret or replace access control.
 
 ## Installation
 
 ```bash
-pip install pycryptodome requests psutil nuitka
+python3 -m pip install -e .
 ```
 
-For development and linting extras use `pip install -e .[dev]` after cloning.
+Install the optional compiler support with:
 
-## Quick Start
+```bash
+python3 -m pip install -e .[binary]
+```
+
+## Quick start
+
+Self-contained protection:
 
 ```bash
 cerberus -i example.py -o protected.py
+python3 protected.py
 ```
 
-Add optional guards:
+External secret, recommended when distributing the output:
 
 ```bash
-cerberus -i example.py -o protected.py --time-bomb 2025-12-31 --usage-limit 10
-cerberus -i example.py -o protected.py --token $GITHUB_TOKEN
-cerberus -i example.py -o protected.py --binary
+export CERBERUS_SECRET="a-long-random-value"
+cerberus -i example.py -o protected.py --secret-env CERBERUS_SECRET
+CERBERUS_SECRET="$CERBERUS_SECRET" python3 protected.py
 ```
 
-## Architecture Overview
+Additional policy controls:
 
-1. **Configuration** (`cerberus.config`) validates paths and guard rails.
-2. **Entropy material** mixes random bytes and optional GitHub token.
-3. **Quad layer cipher** handles encryption/decryption with scrypt derived keys.
-4. **Loader template** embeds runtime checks (anti-debug + sandbox + usage limits).
-5. **CLI** provides thin wrapper around the obfuscation API.
+```bash
+cerberus -i example.py -o protected.py \
+  --time-bomb 2027-12-31 \
+  --usage-limit 10 \
+  --anti-debug
+```
+
+The legacy `cerberus.py` command remains a thin wrapper around the package
+CLI. GitHub-token/Gist integration was removed: embedding or reusing a personal
+access token is not a sound licensing or key-management design.
 
 ## Development
 
-- Formatting and linting: `pip install -e .[dev]` then run `ruff check .` and `mypy .`
-- Tests (to add): run `pytest`
-- Package build: `python -m build`
+```bash
+python3 -m pip install -e .[dev]
+ruff check .
+mypy .
+pytest
+```
 
 ## License
 
-This project is licensed under the ISC License. See the LICENSE file for details.
+This project is licensed under the ISC License. See `LICENSE` for details.

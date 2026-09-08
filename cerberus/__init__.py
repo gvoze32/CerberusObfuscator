@@ -8,5 +8,3 @@ __all__ = [
     "CerberusObfuscator",
     "ObfuscationResult",
 ]
-
-
